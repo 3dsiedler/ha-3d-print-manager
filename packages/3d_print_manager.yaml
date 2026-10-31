@@ -153,6 +153,10 @@ utility_meter:
 # 2. EINSTELLUNGEN & HELFER (Werte im Dashboard pflegen)
 ###############################################################################
 input_text:
+  pm_licht_entity:
+    name: "PM Licht 3D-Druck (Schalter/Licht)"
+    icon: mdi:lightbulb-outline
+    max: 100
   pm_moonraker_url:
     name: "PM Moonraker-URL"
     icon: mdi:printer-3d
@@ -226,7 +230,37 @@ input_text:
     icon: mdi:barcode
     max: 30
 
+input_datetime:
+  pm_licht_aus_zeit:
+    name: "PM Licht 3D-Druck ausschalten um"
+    has_date: false
+    has_time: true
+
 input_number:
+  pm_licht_nachlauf_min:
+    name: "PM Licht 3D-Druck Nachlauf nach Upload (Minuten)"
+    icon: mdi:timer-outline
+    min: 0
+    max: 240
+    step: 5
+    unit_of_measurement: "min"
+    mode: box
+  pm_licht_taster_min:
+    name: "PM Licht 3D-Druck Taster-Dauer (Minuten)"
+    icon: mdi:timer-cog-outline
+    min: 5
+    max: 480
+    step: 5
+    unit_of_measurement: "min"
+    mode: box
+  pm_licht_upload_stunden:
+    name: "PM Licht 3D-Druck: Upload zählt bis (Stunden vorher)"
+    icon: mdi:upload-clock
+    min: 0
+    max: 24
+    step: 1
+    unit_of_measurement: "h"
+    mode: box
   pm_nacht_start:
     name: "PM Nachtdruck Start (Uhr)"
     icon: mdi:weather-night
@@ -456,6 +490,9 @@ input_number:
     mode: box
 
 input_boolean:
+  pm_licht_nachts_aus:
+    name: "PM Licht 3D-Druck nachts automatisch ausschalten"
+    icon: mdi:lightbulb-auto-outline
   pm_kalk_intern:
     name: "PM Kalk Intern"
     icon: mdi:home-account
@@ -1538,10 +1575,117 @@ script:
             Felder aus früheren Fotos bleiben erhalten – ein zweites Foto (Karton bzw. Rolle) ergänzt sie.
             Prüfen, Anzahl und Preis eintragen, dann „Einbuchen“.
 
+  # Taster: 3D-Druck-Licht für die eingestellte Dauer einschalten (z. B. nach Fehler/Abbruch in der Nacht)
+  pm_licht_taster:
+    alias: "PM Licht 3D-Druck – für eine Weile einschalten"
+    icon: mdi:lightbulb-on-outline
+    mode: restart
+    sequence:
+      - action: homeassistant.turn_on
+        target:
+          entity_id: "{{ states('input_text.pm_licht_entity') }}"
+      - delay:
+          minutes: "{{ states('input_number.pm_licht_taster_min') | int(60) }}"
+      - action: homeassistant.turn_off
+        target:
+          entity_id: "{{ states('input_text.pm_licht_entity') }}"
+
 ###############################################################################
 # 6. AUTOMATIONEN
 ###############################################################################
 automation:
+  # ---------------- Lichtsteuerung 3D-Druck ----------------
+  - id: pm_licht_nachts_aus
+    alias: "PM Licht 3D-Druck – nachts ausschalten"
+    description: >-
+      Schaltet das 3D-Druck-Licht zur eingestellten Uhrzeit aus, wenn es noch an ist. Läuft dann schon ein Druck
+      (oder startet nachts einer), geht es sofort aus (spart Strom). Sonst: wurde in den letzten Stunden eine
+      G-Code-Datei hochgeladen, bleibt es noch die eingestellte Nachlaufzeit an; ein Upload nachts (bis 6 Uhr)
+      startet die Nachlaufzeit neu.
+    mode: restart
+    triggers:
+      - trigger: time
+        at: input_datetime.pm_licht_aus_zeit
+        id: abend
+      - trigger: state
+        entity_id: sensor.pm_druckwarteschlange
+        id: upload
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        to: printing
+        id: druckstart
+    conditions:
+      - condition: state
+        entity_id: input_boolean.pm_licht_nachts_aus
+        state: "on"
+      - condition: template
+        value_template: "{{ is_state(states('input_text.pm_licht_entity'), 'on') }}"
+      - condition: or
+        conditions:
+          - condition: trigger
+            id: abend
+          - condition: and
+            conditions:
+              - condition: trigger
+                id: druckstart
+              - condition: time
+                after: input_datetime.pm_licht_aus_zeit
+                before: "06:00:00"
+          - condition: and
+            conditions:
+              - condition: trigger
+                id: upload
+              - condition: not
+                conditions:
+                  - condition: state
+                    entity_id: sensor.pm_druckstatus
+                    state: printing
+              - condition: time
+                after: input_datetime.pm_licht_aus_zeit
+                before: "06:00:00"
+              - condition: template
+                value_template: >-
+                  {{ trigger.from_state is not none
+                     and trigger.from_state.state | int(-1) >= 0
+                     and trigger.to_state.state | int(-1) > trigger.from_state.state | int(-1) }}
+    actions:
+      - choose:
+          # Läuft schon ein Druck (oder startet nachts einer): Licht sofort aus
+          - conditions:
+              - condition: or
+                conditions:
+                  - condition: trigger
+                    id: druckstart
+                  - condition: and
+                    conditions:
+                      - condition: trigger
+                        id: abend
+                      - condition: state
+                        entity_id: sensor.pm_druckstatus
+                        state: printing
+            sequence:
+              - action: homeassistant.turn_off
+                target:
+                  entity_id: "{{ states('input_text.pm_licht_entity') }}"
+              - stop: "Druck laeuft - Licht aus"
+          - conditions:
+              - condition: trigger
+                id: abend
+              - condition: template
+                value_template: >-
+                  {{ ((state_attr('sensor.pm_druckwarteschlange', 'dateien') or []) | map(attribute='hochgeladen') | list + [0]) | max
+                     < now().timestamp() - (states('input_number.pm_licht_upload_stunden') | int(3)) * 3600 }}
+            sequence:
+              - action: homeassistant.turn_off
+                target:
+                  entity_id: "{{ states('input_text.pm_licht_entity') }}"
+              - stop: "Kein Upload im Zeitraum - Licht aus"
+      - delay:
+          minutes: "{{ states('input_number.pm_licht_nachlauf_min') | int(30) }}"
+      - action: homeassistant.turn_off
+        target:
+          entity_id: "{{ states('input_text.pm_licht_entity') }}"
+
   # ---------------- Druckkosten ----------------
   - id: pm_druckkosten_start
     alias: "PM Druckkosten – Druckstart"

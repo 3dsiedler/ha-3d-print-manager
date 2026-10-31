@@ -5,6 +5,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Hinzugefügt
+- Lichtsteuerung 3D-Druck: schaltet das Licht (frei wählbarer Schalter) zur eingestellten Uhrzeit aus; läuft dann schon ein Druck (oder startet nachts einer), sofort; sonst bleibt es nach einem frischen Upload noch die eingestellte Nachlaufzeit an. Taster „Licht an“ im Reiter Drucker schaltet es für eine einstellbare Dauer wieder ein. Alles in den Einstellungen anpassbar.
 - Karte „Nachtplanung“ im Reiter Drucker: schlägt aus den offenen Dateien den längsten Druck vor, der mit 15 min Reserve ins Nachtfenster passt und dessen Spule stimmt (ein Druck pro Nacht); Start und Ende der Nacht in den Einstellungen.
 
 ## [0.1.1-beta] – 2026-10-31

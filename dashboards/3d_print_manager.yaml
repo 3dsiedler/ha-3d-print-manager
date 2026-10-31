@@ -129,6 +129,16 @@ views:
               {%- endfor %}
               </table>
               {%- endif %}
+          - type: button
+            name: Licht an (SV08 Oberlicht)
+            icon: mdi:lightbulb-on-outline
+            show_state: false
+            tap_action:
+              action: perform-action
+              perform_action: script.pm_licht_taster
+            grid_options:
+              columns: 12
+              rows: 1
           - type: tile
             entity: input_select.pm_druck_verwerfen_auswahl
             name: Druck verwerfen
@@ -830,6 +840,25 @@ views:
                 name: Nachtdruck Start (Uhr, z. B. 22 oder 22,5)
               - entity: input_number.pm_nacht_ende
                 name: Nachtdruck spätestens fertig (Uhr)
+          - type: heading
+            heading: Licht 3D-Druck
+            icon: mdi:lightbulb-auto-outline
+            heading_style: subtitle
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_boolean.pm_licht_nachts_aus
+                name: Nachts automatisch ausschalten
+              - entity: input_text.pm_licht_entity
+                name: "Schalter/Licht (z. B. SV08 Oberlicht = switch.dves_waschmaschine)"
+              - entity: input_datetime.pm_licht_aus_zeit
+                name: Ausschalten um
+              - entity: input_number.pm_licht_nachlauf_min
+                name: Nachlauf nach Upload (Minuten)
+              - entity: input_number.pm_licht_upload_stunden
+                name: Upload zählt, wenn nicht älter als (Stunden)
+              - entity: input_number.pm_licht_taster_min
+                name: "Taster Licht an – Dauer (Minuten)"
           - type: heading
             heading: Kosten (Fallback)
             icon: mdi:cash
