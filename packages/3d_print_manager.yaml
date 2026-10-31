@@ -185,6 +185,18 @@ input_text:
     name: "PM Meldung Druckende: Alexa-Durchsagen (notify-Entitäten, Komma-getrennt)"
     icon: mdi:account-voice
     max: 255
+  pm_haendler_bevorzugt:
+    name: "PM Bevorzugte Händler (Komma-getrennt)"
+    icon: mdi:store-outline
+    max: 255
+  pm_we_charge:
+    name: "PM WE Charge / Lot-Nr. (optional; mehrere Rollen: durch Komma trennen)"
+    icon: mdi:identifier
+    max: 255
+  pm_we_bestellnr:
+    name: "PM WE Hersteller-Bestellnr. (optional)"
+    icon: mdi:numeric
+    max: 60
   pm_kalk_kunde:
     name: "PM Kalk Kunde"
     icon: mdi:account
@@ -431,6 +443,9 @@ input_boolean:
   pm_kalk_intern:
     name: "PM Kalk Intern"
     icon: mdi:home-account
+  pm_we_neu_ok:
+    name: "PM WE Neue Sorte / neuen Hersteller anlegen erlauben"
+    icon: mdi:shield-check-outline
 
 counter:
   pm_anzahl_ok_drucke:
@@ -471,6 +486,18 @@ input_select:
     name: "PM WE Vorlage"
     icon: mdi:content-copy
     options: ["– neue Sorte / Foto –"]
+  pm_we_vorschlag:
+    name: "PM WE Vorschlag (passende bekannte Sorten)"
+    icon: mdi:lightbulb-on-outline
+    options: ["– keiner –"]
+  pm_we_haendler:
+    name: "PM WE Händler"
+    icon: mdi:store-outline
+    options: ["– unbekannt –"]
+  pm_we_anlegen_modus:
+    name: "PM WE Neue Sorte anlegen über"
+    icon: mdi:database-plus-outline
+    options: ["In HA anlegen (wie bisher)", "FilaManDB in FilaMan (Test)"]
   pm_we_rollengroesse:
     name: "PM WE Rollengröße"
     icon: mdi:weight-kilogram
@@ -989,6 +1016,12 @@ shell_command:
         ean = (d.get("ean") or "").strip()
         preis = float(d.get("preis") or 0)
         ort = d.get("ort") or "Lager"
+        haendler = (d.get("haendler") or "").strip()
+        charge = (d.get("charge") or "").strip()
+        chargen = [c.strip() for c in charge.replace(";", ",").replace("\n", ",").split(",") if c.strip()]
+        bestellnr = (d.get("bestellnr") or "").strip()
+        neu_ok = bool(d.get("neu_ok"))
+        fdb = bool(d.get("filamandb"))
         if not herst or not mat or not farbe:
             raise ValueError("Hersteller, Material und Farbe angeben")
         fil = r("GET", "filament")
@@ -1003,7 +1036,14 @@ shell_command:
                     break
         neu = False
         if f is None:
-            ven = next((v for v in r("GET", "vendor") if v["name"].lower() == herst.lower()), None) or r("POST", "vendor", {"name": herst})
+            vorh = next((v for v in r("GET", "vendor") if v["name"].lower() == herst.lower()), None)
+            if fdb:
+                print(json.dumps({"ok": False, "rueckfrage": True, "text": "Diese Sorte gibt es noch nicht: " + herst + " " + mat + " " + farbe + " (" + str(int(gew)) + " g). Modus FilaManDB: In FilaMan unter Filamente neu anlegen, Hersteller waehlen, Load from FilaManDB, Sorte auswaehlen, speichern. Danach hier erneut Einbuchen - die Sorte wird dann gefunden. Alternativ den Modus auf In HA anlegen stellen."}))
+                raise SystemExit
+            if not neu_ok:
+                print(json.dumps({"ok": False, "rueckfrage": True, "text": "Diese Sorte gibt es noch nicht: " + herst + " " + mat + " " + farbe + " (" + str(int(gew)) + " g)" + ("" if vorh else " - auch der Hersteller " + herst + " ist neu") + ". Wenn das stimmt: im Wareneingang den Schalter Neue Sorte anlegen erlauben einschalten und erneut Einbuchen. Sonst oben einen Vorschlag waehlen."}))
+                raise SystemExit
+            ven = vorh or r("POST", "vendor", {"name": herst})
             body = {"name": farbe, "vendor_id": ven["id"], "material": mat, "weight": gew, "diameter": 1.75, "density": DICHTE.get(norm(mat).split(" ")[0], 1.24)}
             if hexw:
                 body["color_hex"] = hexw
@@ -1016,9 +1056,17 @@ shell_command:
         elif ean and not f.get("article_number"):
             r("PATCH", "filament/" + str(f["id"]), {"article_number": ean})
         for i in range(anz):
-            sb = {"filament_id": f["id"], "location": ort}
+            sb = {"filament_id": f["id"], "location": ort, "initial_weight": gew}
             if preis:
                 sb["price"] = preis
+            if haendler:
+                sb["comment"] = "Haendler: " + haendler
+            if chargen:
+                c1 = chargen[i] if len(chargen) > 1 and i < len(chargen) else (chargen[0] if len(chargen) == 1 else "")
+                if c1:
+                    sb["lot_nr"] = c1
+            if bestellnr:
+                sb["extra"] = {"herstbestellnr": json.dumps(bestellnr)}
             r("POST", "spool", sb)
         txt = str(anz) + "x " + herst + " " + (f.get("name") or farbe) + " (" + mat + ", " + str(int(gew)) + " g) in " + ort + " eingebucht"
         txt += (" - neue Filamentsorte #" + str(f["id"]) + " angelegt") if neu else (" - Sorte #" + str(f["id"]))
@@ -1243,8 +1291,16 @@ script:
             - input_text.pm_we_farbe
             - input_text.pm_we_farbcode
             - input_text.pm_we_barcode
+            - input_text.pm_we_charge
+            - input_text.pm_we_bestellnr
         data:
           value: ""
+      - action: input_select.select_first
+        target:
+          entity_id: [input_select.pm_we_vorschlag, input_select.pm_we_haendler]
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pm_we_neu_ok
       - action: input_select.select_option
         target:
           entity_id: input_select.pm_we_rollengroesse
@@ -1275,7 +1331,12 @@ script:
                 'gewicht': (states('input_select.pm_we_rollengroesse') | replace(' kg','') | replace(',','.') | float(1)) * 1000,
                 'anzahl': states('input_number.pm_we_anzahl') | int(1),
                 'preis': states('input_number.pm_we_preis_pro_rolle') | float(0),
-                'ort': states('input_text.pm_lager_wareneingang')} }}
+                'ort': states('input_text.pm_lager_wareneingang'),
+                'haendler': '' if (states('input_select.pm_we_haendler').startswith('–') or states('input_select.pm_we_haendler').startswith('anderer')) else states('input_select.pm_we_haendler'),
+                'charge': states('input_text.pm_we_charge'),
+                'bestellnr': states('input_text.pm_we_bestellnr'),
+                'neu_ok': is_state('input_boolean.pm_we_neu_ok', 'on'),
+                'filamandb': states('input_select.pm_we_anlegen_modus').startswith('FilaManDB')} }}
       - action: shell_command.pm_spule_einbuchen
         data:
           daten: "{{ daten | to_json | base64_encode }}"
@@ -1287,7 +1348,9 @@ script:
       - action: persistent_notification.create
         data:
           notification_id: pm_wareneingang
-          title: "{{ 'Wareneingang gebucht' if ergebnis.ok else 'Wareneingang fehlgeschlagen' }}"
+          title: >-
+            {{ 'Wareneingang gebucht' if ergebnis.ok else
+               ('Rückfrage: Sorte fehlt' if ergebnis.rueckfrage | default(false) else 'Wareneingang fehlgeschlagen') }}
           message: "{{ ergebnis.text }}"
       - if:
           - condition: template
@@ -1330,34 +1393,52 @@ script:
             Hersteller (Marke), Material genau wie aufgedruckt (z. B. PLA, PLA+, PLA+ 2.0, PETG, PETG HS,
             Silk PLA, ABS, ASA, TPU 95A – Zusätze wie 2.0, HS, Matte, Silk, CF NICHT weglassen),
             Farbname wie aufgedruckt, Farbcode als Hex (#RRGGBB) passend zur Farbe der Rolle/des Etiketts,
-            Nettogewicht in Gramm (z. B. 1 kg = 1000) und die Ziffern des EAN-/Strichcodes.
-            Unbekanntes leer lassen bzw. 0. Nichts erfinden.
+            Nettogewicht EINER Spule in Gramm (z. B. 1 kg = 1000, 500 g = 500) und den Strichcode.
+            Strichcode: bei Polymaker/Fiberon die 13 Ziffern unter dem Strichcode (ohne Leerzeichen);
+            bei Sunlu-Kartons (Amazon-Etikett) der Code direkt unter dem Strichcode, z. B. X002CGZUOT
+            oder 03951112A – Buchstaben UND Ziffern genau abschreiben, nichts weglassen.
+            SKU: der Text nach "SKU" auf dem Etikett (z. B. PB05012, CA04053, FB04001), sonst leer.
+            Charge: nur wenn ausdrücklich mit Lot, Batch oder Charge beschriftet, sonst leer (nicht raten).
+            Anzahl Spulen im Karton: normalerweise 1. Steht auf einem Sunlu-Karton z. B. "3KG", sind es
+            3 Spulen zu je 1 kg (gewicht_g = 1000, anzahl_spulen = 3). Bei "0.5KG*2" sind es 2 Spulen zu
+            je 500 g. Material, Farbcode und alles andere nur eintragen, wenn es auf DIESEM Foto steht –
+            Etiketten zeigen oft nur einen Teil der Angaben (Karton: Material, SKU, Barcode; Rolle: Farbe,
+            Batch). Unbekanntes leer lassen bzw. 0. Nichts erfinden, nichts aus dem Farbnamen ableiten.
           structure:
             hersteller:
-              description: "Marke/Hersteller"
-              required: true
+              description: "Marke/Hersteller, nur wenn auf dem Foto lesbar, sonst leer"
               selector:
                 text:
             material:
-              description: "Material inkl. Zusätzen wie aufgedruckt"
-              required: true
+              description: "Material inkl. Zusätzen (z. B. PETG, PLA+ 2.0) nur wenn auf dem Foto aufgedruckt, sonst leer – nie aus der Farbe oder Marke raten"
               selector:
                 text:
             farbe:
-              description: "Farbname wie aufgedruckt"
-              required: true
+              description: "Farbname wie aufgedruckt, sonst leer"
               selector:
                 text:
             farbcode:
-              description: "Hex-Farbcode #RRGGBB"
+              description: "Hex-Farbcode #RRGGBB nur wenn er auf dem Etikett aufgedruckt ist, sonst leer – nie aus dem Farbnamen ableiten"
               selector:
                 text:
             gewicht_g:
-              description: "Nettogewicht in Gramm"
+              description: "Nettogewicht einer einzelnen Spule in Gramm"
+              selector:
+                number:
+            anzahl_spulen:
+              description: "Anzahl Spulen im Karton (Standard 1)"
               selector:
                 number:
             barcode:
-              description: "EAN/Barcode-Ziffern"
+              description: "Strichcode: EAN-Ziffern oder alphanumerischer Code unter dem Strichcode"
+              selector:
+                text:
+            sku:
+              description: "Text nach SKU auf dem Etikett (Hersteller-Bestellnummer), sonst leer"
+              selector:
+                text:
+            charge:
+              description: "Charge/Lot/Batch nur wenn ausdrücklich so beschriftet, sonst leer"
               selector:
                 text:
           attachments:
@@ -1366,45 +1447,79 @@ script:
         response_variable: ki
       - variables:
           d: "{{ ki.data if ki.data is mapping else {} }}"
-      - variables:
-          gew: "{{ d.gewicht_g | float(1000) }}"
+          gew: "{{ d.gewicht_g | float(0) }}"
+          anz: "{{ d.anzahl_spulen | int(0) }}"
+      # Zusammenführen: Ein Feld wird nur überschrieben, wenn das neue Foto dafür einen Wert liefert.
+      # So ergänzen sich Karton-Foto (SKU, Barcode, Packungsgröße) und Rollen-Foto (Charge, Farbe, Gewicht).
       - action: input_text.set_value
         target:
           entity_id: input_text.pm_we_hersteller
         data:
-          value: "{{ (d.hersteller | default(''))[:60] }}"
+          value: "{{ ((d.hersteller | default('') | string | trim) or states('input_text.pm_we_hersteller') | replace('unknown', ''))[:60] }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.pm_we_material
         data:
-          value: "{{ (d.material | default(''))[:60] }}"
+          value: "{{ ((d.material | default('') | string | trim) or states('input_text.pm_we_material') | replace('unknown', ''))[:60] }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.pm_we_farbe
         data:
-          value: "{{ (d.farbe | default(''))[:80] }}"
+          value: "{{ ((d.farbe | default('') | string | trim) or states('input_text.pm_we_farbe') | replace('unknown', ''))[:80] }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.pm_we_farbcode
         data:
-          value: "{{ (d.farbcode | default(''))[:7] }}"
+          value: "{{ ((d.farbcode | default('') | string | trim) or states('input_text.pm_we_farbcode') | replace('unknown', ''))[:7] }}"
       - action: input_text.set_value
         target:
           entity_id: input_text.pm_we_barcode
         data:
-          value: "{{ ((d.barcode | default('')) | regex_replace('[^0-9]', ''))[:30] }}"
-      - action: input_select.select_option
+          value: "{{ (((d.barcode | default('') | string) | upper | regex_replace('[^0-9A-Z]', '')) or (states('input_text.pm_we_barcode') | replace('unknown', '')))[:30] }}"
+      - action: input_text.set_value
         target:
-          entity_id: input_select.pm_we_rollengroesse
+          entity_id: input_text.pm_we_bestellnr
         data:
-          option: "{{ {1000:'1 kg',3000:'3 kg',500:'0,5 kg',750:'0,75 kg',2000:'2 kg',5000:'5 kg'}.get(gew | int, '1 kg') }}"
+          value: "{{ (((d.sku | default('') | string) | regex_replace('(?i)^\\s*sku[: ]*', '') | trim) or (states('input_text.pm_we_bestellnr') | replace('unknown', '')))[:60] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_charge
+        data:
+          value: >-
+            {%- set alt = states('input_text.pm_we_charge') | replace('unknown', '') | trim -%}
+            {%- set neu = d.charge | default('') | string | trim -%}
+            {%- set liste = alt.split(',') | map('trim') | select | list -%}
+            {%- if not neu -%}{{ alt }}
+            {%- elif neu in liste -%}{{ alt }}
+            {%- elif liste and ([anz, states('input_number.pm_we_anzahl') | int(1)] | max) > 1 -%}{{ (alt ~ ', ' ~ neu)[:255] }}
+            {%- else -%}{{ neu[:255] }}{%- endif -%}
+      - if:
+          - condition: template
+            value_template: "{{ anz > 0 }}"
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_we_anzahl
+            data:
+              value: "{{ [anz, 50] | min }}"
+      - if:
+          - condition: template
+            value_template: "{{ gew > 0 }}"
+        then:
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.pm_we_rollengroesse
+            data:
+              option: "{{ {1000:'1 kg',3000:'3 kg',500:'0,5 kg',750:'0,75 kg',2000:'2 kg',5000:'5 kg'}.get(gew | int, '1 kg') }}"
       - action: persistent_notification.create
         data:
           notification_id: pm_wareneingang
-          title: "Typenschild erkannt – bitte prüfen"
+          title: "Foto erkannt – bitte prüfen"
           message: >-
-            {{ d.hersteller | default('?') }} {{ d.material | default('?') }} – {{ d.farbe | default('?') }}
-            {{ d.farbcode | default('') }}, {{ gew | int }} g, Barcode {{ d.barcode | default('–') }}.
+            Dieses Foto: {{ d.hersteller | default('') }} {{ d.material | default('') }} {{ d.farbe | default('') }}
+            {% if gew > 0 %}{{ gew | int }} g{% endif %}{% if anz > 1 %} × {{ anz }}{% endif %}
+            {% if d.barcode %}· Barcode {{ d.barcode }}{% endif %}{% if d.sku %} · SKU {{ d.sku }}{% endif %}{% if d.charge %} · Charge {{ d.charge }}{% endif %}.
+            Felder aus früheren Fotos bleiben erhalten – ein zweites Foto (Karton bzw. Rolle) ergänzt sie.
             Prüfen, Anzahl und Preis eintragen, dann „Einbuchen“.
 
 ###############################################################################
@@ -1816,6 +1931,94 @@ automation:
         data:
           value: "{{ ((f.preis_kg or 0) * (f.rollengewicht | float(1000)) / 1000) | round(2) }}"
 
+  # ---------------- Wareneingang: Vorschläge, Händlerliste ----------------
+  - id: pm_we_vorschlaege
+    alias: "PM Wareneingang – Vorschläge aus bekannten Sorten"
+    description: >-
+      Sucht zu den eingegebenen/erkannten Daten bis zu 3 passende bekannte Sorten
+      (Filamente aus Spoolman). Übernommen wird erst nach Auswahl durch dich.
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_text.pm_we_hersteller
+          - input_text.pm_we_material
+          - input_text.pm_we_farbe
+          - input_text.pm_we_farbcode
+          - input_text.pm_we_barcode
+          - input_select.pm_we_rollengroesse
+        for: "00:00:02"
+    actions:
+      - variables:
+          treffer: >-
+            {%- macro norm(s) -%}{{ ((s or '') | lower | replace('+', ' plus ') | replace('plus', ' plus ') | regex_replace('[^a-z0-9.]+', ' ') | regex_replace(' +', ' ')) | trim }}{%- endmacro -%}
+            {%- set herst = states('input_text.pm_we_hersteller') | trim | lower -%}
+            {%- set mat = norm(states('input_text.pm_we_material')) -%}
+            {%- set farbe = states('input_text.pm_we_farbe') | trim | lower -%}
+            {%- set hexw = states('input_text.pm_we_farbcode') | trim | replace('#', '') | upper -%}
+            {%- set ean = states('input_text.pm_we_barcode') | trim -%}
+            {%- set gew = (states('input_select.pm_we_rollengroesse') | replace(' kg', '') | replace(',', '.') | float(1)) * 1000 -%}
+            {%- set fl = state_attr('sensor.pm_kalkulationsdaten', 'filamente') or [] -%}
+            {%- set ns = namespace(p=[]) -%}
+            {%- for f in fl -%}
+            {%- set h = f.hersteller | lower -%}
+            {%- set n = f.name | lower -%}
+            {%- set sc = namespace(v=0) -%}
+            {%- if ean and f.ean == ean -%}{%- set sc.v = sc.v + 100 -%}{%- endif -%}
+            {%- if herst and h == herst -%}{%- set sc.v = sc.v + 30 -%}{%- elif herst and (herst in h or h in herst) -%}{%- set sc.v = sc.v + 15 -%}{%- endif -%}
+            {%- if mat and norm(f.material) == mat -%}{%- set sc.v = sc.v + 25 -%}{%- endif -%}
+            {%- if farbe and (farbe in n or n in farbe) -%}{%- set sc.v = sc.v + 20 -%}{%- endif -%}
+            {%- if hexw and f.hex == hexw -%}{%- set sc.v = sc.v + 10 -%}{%- endif -%}
+            {%- if (f.rollengewicht | float(0) - gew) | abs < 1 -%}{%- set sc.v = sc.v + 5 -%}{%- endif -%}
+            {%- if sc.v >= 40 -%}{%- set ns.p = ns.p + [[sc.v, f.label]] -%}{%- endif -%}
+            {%- endfor -%}
+            {{ (ns.p | sort(reverse=true))[:3] | map(attribute=1) | list }}
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_we_vorschlag
+        data:
+          options: "{{ ['– keiner –'] + treffer }}"
+
+  - id: pm_we_vorschlag_uebernehmen
+    alias: "PM Wareneingang – Vorschlag übernehmen"
+    description: "Übernimmt die gewählte bekannte Sorte in die Felder des Wareneingangs (Werte bleiben änderbar)."
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: input_select.pm_we_vorschlag
+        not_to: ["– keiner –", "unavailable", "unknown"]
+    actions:
+      - action: input_select.select_first
+        target:
+          entity_id: input_select.pm_we_vorlage
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_we_vorlage
+        data:
+          option: "{{ trigger.to_state.state }}"
+
+  - id: pm_we_haendlerliste
+    alias: "PM Wareneingang – Händlerliste aktualisieren"
+    description: "Füllt die Händler-Auswahl im Wareneingang aus den bevorzugten Händlern (Einstellungen)."
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: input_text.pm_haendler_bevorzugt
+      - trigger: homeassistant
+        event: start
+      # Nach einem Neuladen der YAML-Helfer ist die Auswahl wieder auf den Startwert zurückgesetzt
+      - trigger: template
+        value_template: "{{ state_attr('input_select.pm_we_haendler', 'options') | length < 3 }}"
+    actions:
+      - delay: "00:00:05"
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_we_haendler
+        data:
+          options: >-
+            {{ ['– unbekannt –'] + (states('input_text.pm_haendler_bevorzugt') | replace(', ', ',')).split(',')
+               | reject('in', ['', 'unknown', 'unavailable']) | list + ['anderer Händler'] }}
+
   # ---------------- Meldung bei Druckende (Handy / Alexa) ----------------
   - id: pm_druckende_meldung
     alias: "PM Druckende – Meldung (Handy & Alexa)"
@@ -1923,6 +2126,16 @@ automation:
               entity_id: input_text.pm_ki_entity
             data:
               value: "ai_task.openai_ai_task"
+      - if:
+          - condition: state
+            entity_id: input_text.pm_haendler_bevorzugt
+            state: ["", "unknown"]
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.pm_haendler_bevorzugt
+            data:
+              value: "Amazon,Polymaker,Sunlu"
       - if:
           - condition: state
             entity_id: input_text.pm_lagerorte

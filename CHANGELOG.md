@@ -4,12 +4,23 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Hinzugefügt
+- Mehrere Rollen pro Buchung können eigene Chargen haben: im Feld Charge durch Komma trennen, Rolle 1 bekommt die erste Charge usw. (eine einzelne Charge gilt für alle Rollen). Die Foto-Auswertung hängt bei Anzahl > 1 weitere Chargen automatisch an.
+- Foto-Auswertung ergänzt statt zu überschreiben: Karton-Foto (SKU, Barcode, Packungsgröße) und Rollen-Foto (Charge, Farbe, Gewicht) lassen sich nacheinander auswerten; leere Erkennungswerte löschen vorhandene Felder nicht mehr.
+- Foto-Auswertung: SKU wird als Hersteller-Bestellnr. übernommen, Charge nur bei eindeutiger Beschriftung (Lot/Batch/Charge), alphanumerischer Barcode (z. B. Sunlu X002…), Packungsgröße (3KG = 3×1 kg, 0.5KG*2 = 2×500 g).
+- Wareneingang: Feld „Hersteller-Bestellnr.“ – wird beim Einbuchen in das FilaMan-Zusatzfeld `herstbestellnr` der Spule geschrieben (Zusatzfeld vom Typ Text muss für Spulen angelegt sein)
+- Wareneingang: Auswahl „Neue Sorte anlegen über“ – „In HA anlegen (wie bisher)“ oder „FilaManDB in FilaMan (Test)“. Im Testmodus legt HA nichts an, sondern zeigt die Anleitung, die Sorte in FilaMan per „Load from FilaManDB“ anzulegen; danach findet erneutes Einbuchen sie.
+
 ### Behoben
 - Dashboard: Markdown-Karten verloren Zeilenumbrüche (Lagerbestand: Typenliste in der Überschrift, zweiter Lagerort fehlte)
 - Leere Textfelder (Kalkulation, Wareneingang) zeigten „unknown“ – werden jetzt beim Start geleert
 
 ### Neu
 - Meldung bei Druckende (fertig/Fehler/abgebrochen) per Handy-Push und Alexa-Durchsage mit einstellbarem Zeitfenster; Antippen der Handy-Meldung öffnet das Dashboard (Companion-App)
+- Wareneingang: bis zu 3 passende bekannte Sorten als Vorschlag (Übernahme erst nach Auswahl, Werte bleiben änderbar), Abweichungsanzeige zur bekannten Sorte
+- Wareneingang: neue Sorte bzw. neuer Hersteller wird nur nach ausdrücklicher Bestätigung (Schalter) angelegt, sonst Rückfrage
+- Wareneingang: Händler (an der Spule im Kommentar vermerkt), optionale Charge/Lot-Nr., Rollengewicht wird als Anfangsgewicht der Spule gespeichert
+- Einstellung „Bevorzugte Händler“ (Standard Amazon, Polymaker, Sunlu): Auswahlliste im Wareneingang und Vorschlag in der Bestellliste
 - Screenshots im README
 
 ## [0.1.0-beta] – 2026-10-31

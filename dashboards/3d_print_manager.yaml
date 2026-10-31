@@ -469,8 +469,13 @@ views:
               {%- for f in ns.z %}
               {%- set fehlt = mind - f.frei_nach_auftraegen_g %}
               {%- set vs = ([f] + f.alternativen) | selectattr('preis_kg') | sort(attribute='preis_kg') | list %}
-              | {{ f.hersteller }} {{ f.name }} ({{ f.material }}) | {{ f.frei_nach_auftraegen_g }} g | {{ '📋 Auftrag' if f.frei_nach_auftraegen_g < 0 else '📉 Mindestbestand' }} | **{{ (fehlt / f.rollengewicht) | round(0, 'ceil') | int }}× {{ (f.rollengewicht / 1000) | round(2) }} kg** | {% if vs %}{{ vs[0].label }} ({{ '%.2f' | format(vs[0].preis_kg) }} €/kg){% else %}–{% endif %} |
+              {%- set bev = (states('input_text.pm_haendler_bevorzugt') | lower | replace(', ', ',')).split(',') | reject('eq', '') | list %}
+              {%- set vb = vs | selectattr('label', 'search', '(?i)(' ~ (bev | join('|')) ~ ')') | list if bev else [] %}
+              {%- set v1 = vb[0] if vb else (vs[0] if vs else none) %}
+              | {{ f.hersteller }} {{ f.name }} ({{ f.material }}) | {{ f.frei_nach_auftraegen_g }} g | {{ '📋 Auftrag' if f.frei_nach_auftraegen_g < 0 else '📉 Mindestbestand' }} | **{{ (fehlt / f.rollengewicht) | round(0, 'ceil') | int }}× {{ (f.rollengewicht / 1000) | round(2) }} kg** | {% if v1 %}{{ v1.label }} ({{ '%.2f' | format(v1.preis_kg) }} €/kg){% if vb %} ⭐{% endif %}{% else %}–{% endif %} |
               {%- endfor %}
+
+              <small>⭐ = Vorschlag bei einem bevorzugten Händler/Hersteller ({{ states('input_text.pm_haendler_bevorzugt') }}) – sonst die günstigste Sorte.</small>
               {%- endif %}
               {%- if ns.leer %}
 
@@ -540,8 +545,10 @@ views:
           - type: entities
             show_header_toggle: false
             entities:
+              - entity: input_select.pm_we_vorschlag
+                name: Vorschlag (passende bekannte Sorten)
               - entity: input_select.pm_we_vorlage
-                name: Vorlage (bekannte Sorte)
+                name: Alle bekannten Sorten (Vorlage)
           - type: heading
             heading: ② Prüfen & ergänzen
             heading_style: subtitle
@@ -570,6 +577,12 @@ views:
                 name: Anzahl Rollen
               - entity: input_number.pm_we_preis_pro_rolle
                 name: Preis pro Rolle
+              - entity: input_select.pm_we_haendler
+                name: Händler (wird an der Spule vermerkt)
+              - entity: input_text.pm_we_charge
+                name: Charge / Lot-Nr. vom Etikett (optional, mehrere Rollen: Komma)
+              - entity: input_text.pm_we_bestellnr
+                name: Hersteller-Bestellnr. vom Etikett (optional)
 
       - type: grid
         cards:
@@ -600,18 +613,39 @@ views:
               {%- endfor -%}
               {%- set treffer = ns.t -%}
               {%- endif -%}
+              {%- set dn = namespace(l=[]) -%}
+              {%- if treffer and not fehlend -%}
+              {%- set t = treffer[0] -%}
+              {%- if t.hersteller | lower != herst | lower -%}{%- set dn.l = dn.l + ['Hersteller: ' ~ t.hersteller] -%}{%- endif -%}
+              {%- if norm(t.material) != norm(mat) -%}{%- set dn.l = dn.l + ['Material: ' ~ t.material] -%}{%- endif -%}
+              {%- if (farbe | lower) not in (t.name | lower) -%}{%- set dn.l = dn.l + ['Farbe: ' ~ t.name] -%}{%- endif -%}
+              {%- if hexw and t.hex and hexw != t.hex -%}{%- set dn.l = dn.l + ['Farbcode: #' ~ t.hex] -%}{%- endif -%}
+              {%- endif -%}
+              {%- set herst_neu = herst | lower not in (fl | map(attribute='hersteller') | map('lower') | list) -%}
+              {%- set haendler = states('input_select.pm_we_haendler') -%}
+              {%- set charge = states('input_text.pm_we_charge') | trim -%}
+              {%- set bestellnr = states('input_text.pm_we_bestellnr') | trim -%}
+              {%- set erlaubt = is_state('input_boolean.pm_we_neu_ok', 'on') -%}
+              {%- set fdb = states('input_select.pm_we_anlegen_modus').startswith('FilaManDB') -%}
               {%- if fehlend | length == 3 %}
               <ha-alert alert-type="info" title="Noch nichts erfasst">Foto auswerten, eine Vorlage wählen oder die Felder ausfüllen – hier erscheint dann die Buchungsvorschau.</ha-alert>
               {%- elif fehlend %}
               <ha-alert alert-type="warning" title="Noch unvollständig">Bitte ausfüllen: {{ fehlend | join(', ') }}</ha-alert>
               {%- else %}
-              <ha-alert alert-type="{{ 'success' if treffer else 'info' }}" title="{{ anz }}× {{ herst }} {{ mat }} – {{ farbe }}">
+              <ha-alert alert-type="{{ 'success' if treffer else ('info' if erlaubt else 'warning') }}" title="{{ anz }}× {{ herst }} {{ mat }} – {{ farbe }}">
               {{ anz }} Rolle(n) à {{ (gew / 1000) | round(2) | string | replace('.', ',') }} kg{% if hexw %} · #{{ hexw }}{% endif %}{% if ean not in leer %} · EAN {{ ean }}{% endif %}<br>
               {% if preis > 0 %}{{ eur(preis) }} je Rolle · {{ eur(preis * anz) }} gesamt · {{ eur(preis / gew * 1000) }}/kg{% else %}⚠️ Kein Preis angegeben{% endif %}<br>
-              {% if treffer %}✅ Bekannte Sorte <b>{{ treffer[0].label }}</b> – Bestand danach {{ treffer[0].bestand_g + (gew * anz) | int }} g{% else %}🆕 Wird in Spoolman als <b>neue Sorte</b> angelegt{% endif %}<br>
-              📦 Ziel: {{ ziel }}
+              {% if treffer %}✅ Bekannte Sorte <b>{{ treffer[0].label }}</b> – Bestand danach {{ treffer[0].bestand_g + (gew * anz) | int }} g{% if dn.l %}<br>⚠️ Weicht ab von der bekannten Sorte – gebucht wird auf diese: {{ dn.l | join(' · ') }}{% endif %}{% else %}🆕 Keine passende Sorte gefunden – würde in Spoolman als <b>neue Sorte</b> angelegt{% if herst_neu %} (<b>Hersteller {{ herst }} ist ebenfalls neu</b>){% endif %}.<br>{% if fdb %}🧪 Modus FilaManDB: wird nicht aus HA angelegt. Einbuchen zeigt die Anleitung – Sorte in FilaMan über „Load from FilaManDB“ anlegen, danach erneut Einbuchen.{% elif erlaubt %}✅ Anlegen ist erlaubt (Schalter unten).{% else %}⛔ Wird erst nach deiner Bestätigung angelegt: Schalter „Neue Sorte anlegen erlauben“ unten einschalten. Besser vorher oben einen Vorschlag prüfen.{% endif %}{% endif %}<br>
+              📦 Ziel: {{ ziel }}{% if haendler[0] != '–' and not haendler.startswith('anderer') %} · 🛒 {{ haendler }}{% endif %}{% if charge %} · Charge {{ charge }}{% endif %}{% if bestellnr %} · Best.-Nr. {{ bestellnr }}{% endif %}
               </ha-alert>
               {%- endif %}
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_select.pm_we_anlegen_modus
+                name: Neue Sorte anlegen über
+              - entity: input_boolean.pm_we_neu_ok
+                name: Neue Sorte / neuen Hersteller anlegen erlauben (nur Modus HA)
           - type: button
             name: Einbuchen
             icon: mdi:package-variant-plus
@@ -741,6 +775,8 @@ views:
                 name: Plätze am Drucker (z. B. AMS-1,AMS-2,Halter:2)
               - entity: input_text.pm_lager_wareneingang
                 name: Lagerort für Wareneingang
+              - entity: input_text.pm_haendler_bevorzugt
+                name: Bevorzugte Händler (Komma-getrennt, z. B. Amazon,Polymaker,Sunlu)
               - entity: input_number.pm_tage_warteschlange
                 name: Zeitraum "Noch zu drucken"
           - type: heading

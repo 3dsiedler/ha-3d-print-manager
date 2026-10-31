@@ -41,7 +41,9 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
 **Wareneingang**
 - Rollen in Spoolman/FilaMan einbuchen: manuell, per Vorlage oder **per Foto vom Typenschild** (KI liest Hersteller, Material, Farbe, Gewicht, Barcode)
 - Upload-Karte mit Drag & Drop (PC) bzw. direkter Kamera (Handy)
-- Neue Hersteller/Sorten werden automatisch angelegt, Barcode wird gespeichert und wiedererkannt
+- Passende bekannte Sorten werden vorgeschlagen (bis zu 3); übernommen wird erst nach deiner Auswahl, alles bleibt änderbar
+- Neue Hersteller/Sorten werden nur nach ausdrücklicher Bestätigung angelegt; Barcode wird gespeichert und wiedererkannt
+- Händler (z. B. Amazon, Polymaker, Sunlu – einstellbar) und optionale Charge werden an der Spule vermerkt; bevorzugte Händler fließen in den Vorschlag der Bestellliste ein
 
 **Lager**
 - Spulen an den Druckerplätzen (mit Überbelegungs-Warnung) und Bestand je Lagerort
@@ -79,7 +81,7 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
    - Spoolman-API, z. B. `http://192.168.1.60:7912/api/v1` (Spoolman) bzw. `http://192.168.1.60:8083/spoolman/api/v1` (FilaMan)
    - Lagerorte (wie das Feld „Location“ in Spoolman/FilaMan, Komma-getrennt), z. B. `Regal,Keller`
    - Plätze am Drucker, z. B. `AMS-1,AMS-2,Halter:2` (`:2` = Platz für 2 Spulen)
-   - Lagerort für Wareneingang, KI-Entität (z. B. `ai_task.openai_ai_task`)
+   - Bevorzugte Händler (Komma-getrennt), Lagerort für Wareneingang, KI-Entität (z. B. `ai_task.openai_ai_task`)
    - Meldung bei Druckende: `notify`-Entitäten der Handys mit Companion-App (z. B. `notify.pixel_10_pro_xl`; Antippen der Meldung öffnet das Dashboard) und der Alexa-Durchsagen (z. B. `notify.echo_wohnzimmer_sprechen`, benötigt die Alexa-Integration; „…_sprechen“ liest den Text direkt vor, „…_durchsagen“ braucht freigeschaltete Durchsagen in der Alexa-App und blieb im Test stumm), Zeitfenster für Durchsagen (Standard 8–22 Uhr)
    - Sätze im Reiter *Aufträge* (Maschine, Lohn, Konstruktion, Aufschlag, Mindestbestand)
 8. Der **Verbindungstest** im Reiter *Einstellungen* zeigt nach spätestens 5 Minuten, ob alles erreichbar ist.

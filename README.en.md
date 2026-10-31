@@ -43,7 +43,9 @@ Print management, filament inventory and job costing for **Klipper printers with
 **Goods receipt**
 - Book spools into Spoolman/FilaMan: manually, from a template, or **from a photo of the spool label** (AI reads manufacturer, material, colour, weight, barcode)
 - Upload card with drag & drop (desktop) or direct camera (mobile)
-- New vendors/filaments are created automatically; the barcode is stored and recognised next time
+- Up to 3 matching known filaments are suggested; nothing is adopted until you pick one, and every value stays editable
+- New vendors/filaments are only created after explicit confirmation; the barcode is stored and recognised next time
+- Retailer (e.g. Amazon, Polymaker, Sunlu – configurable) and an optional lot number are noted on the spool; preferred retailers feed the reorder list suggestion
 
 **Storage**
 - Spools at printer slots (with over-occupancy warning) and stock per storage location
@@ -76,7 +78,7 @@ Print management, filament inventory and job costing for **Klipper printers with
 5. **Register the card:** *Settings → Dashboards → ⋮ → Resources → Add resource*
    URL `/local/print_manager/pm-foto-upload-card.js?v=0.1.0`, type *JavaScript module*.
 6. **Create the dashboard:** *Settings → Dashboards → Add dashboard → New dashboard from scratch* → open → ✏️ → ⋮ → *Raw configuration editor* → paste `dashboards/3d_print_manager.yaml` → save. Adjust the two camera entities or delete those cards.
-7. **Enter settings** (tab *Einstellungen*): Moonraker URL (`http://192.168.1.50:7125`), Spoolman API (`http://192.168.1.60:7912/api/v1`, or `http://192.168.1.60:8083/spoolman/api/v1` for FilaMan), storage locations (as in Spoolman "Location", comma separated), printer slots (`AMS-1,AMS-2,Holder:2` – `:2` = room for 2 spools), location for goods receipt, AI entity (`ai_task.openai_ai_task`), notification targets for print end (`notify` entities of your phones with the Companion app, e.g. `notify.my_phone` – tapping the notification opens the dashboard, and of Alexa announcements, e.g. `notify.echo_living_room_sprechen` – use the "Sprechen" (speak) entities; the "Durchsagen" (announce) ones stayed silent in testing; comma separated; Alexa window defaults to 8–22 h). Rates are in the *Aufträge* tab.
+7. **Enter settings** (tab *Einstellungen*): Moonraker URL (`http://192.168.1.50:7125`), Spoolman API (`http://192.168.1.60:7912/api/v1`, or `http://192.168.1.60:8083/spoolman/api/v1` for FilaMan), preferred retailers (comma separated, default Amazon,Polymaker,Sunlu), storage locations (as in Spoolman "Location", comma separated), printer slots (`AMS-1,AMS-2,Holder:2` – `:2` = room for 2 spools), location for goods receipt, AI entity (`ai_task.openai_ai_task`), notification targets for print end (`notify` entities of your phones with the Companion app, e.g. `notify.my_phone` – tapping the notification opens the dashboard, and of Alexa announcements, e.g. `notify.echo_living_room_sprechen` – use the "Sprechen" (speak) entities; the "Durchsagen" (announce) ones stayed silent in testing; comma separated; Alexa window defaults to 8–22 h). Rates are in the *Aufträge* tab.
 8. The **connection test** in the *Einstellungen* tab shows within ~5 minutes whether everything is reachable.
 
 > 📷 Photos are stored in *Media → My media → filament_fotos*. Only **administrators** may upload media in Home Assistant.
