@@ -4,6 +4,9 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Hinzugefügt
+- Karte „Nachtplanung“ im Reiter Drucker: schlägt aus den offenen Dateien den längsten Druck vor, der mit 15 min Reserve ins Nachtfenster passt und dessen Spule stimmt (ein Druck pro Nacht); Start und Ende der Nacht in den Einstellungen.
+
 ## [0.1.1-beta] – 2026-10-31
 
 ### Hinzugefügt

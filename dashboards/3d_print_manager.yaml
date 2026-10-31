@@ -82,6 +82,53 @@ views:
               **Noch offen:** {{ offen | length }} Datei(en) · {{ (offen | sum(attribute='dauer_s')) // 3600 }}h {{ '%02d' | format(((offen | sum(attribute='dauer_s')) % 3600) // 60) }}m · {{ (offen | sum(attribute='gewicht_g')) | round(0) | int }} g{% set w = state_attr('sensor.pm_druckwarteschlange','wechsel') | int(0) %}{% if w %} · 🧺 {{ w }}× Spule holen/wechseln{% else %} · 👍 kein Spulenwechsel nötig{% endif %}
               {%- endif %}
               {%- endif %}
+          - type: heading
+            heading: Nachtplanung
+            icon: mdi:weather-night
+          - type: markdown
+            content: |-
+              {%- set l = state_attr('sensor.pm_druckwarteschlange','dateien') or [] -%}
+              {%- set von = states('input_number.pm_nacht_start') | float(22) -%}
+              {%- set bis = states('input_number.pm_nacht_ende') | float(7) -%}
+              {%- set fenster = ((bis - von) if bis > von else (bis - von + 24)) * 3600 -%}
+              {%- set reserve = 900 -%}
+              {%- macro uhr(x) -%}{{ '%02d:%02d' | format((x | int) % 24, ((x % 1) * 60) | round(0) | int) }}{%- endmacro -%}
+              {%- set offen = l | rejectattr('status','eq','in_progress') | selectattr('dauer_s','gt',0) | list -%}
+              {%- set ns = namespace(l=[]) -%}
+              {%- for f in offen -%}
+              {%- if (f.dauer_s | int(0)) + reserve <= fenster and (f.pruefung or [])[0:1] | select('match', '^✅') | list | length > 0 -%}{%- set ns.l = ns.l + [f] -%}{%- endif -%}
+              {%- endfor -%}
+              <small>Nachtfenster {{ uhr(von) }}–{{ uhr(bis) }} Uhr ({{ fenster // 3600 }}h {{ '%02d' | format((fenster % 3600) // 60) }}m) · pro Nacht nur ein Druck, da die Teile nicht abgeräumt werden</small>
+              {%- if is_state('sensor.pm_druckstatus','printing') %}
+
+              🖨️ Der Drucker druckt gerade{% set ende = states('sensor.pm_druckende') %}{% if ende not in ['unknown','unavailable','none',''] %} – voraussichtlich fertig {{ as_local(ende | as_datetime).strftime('%d.%m. %H:%M') }} Uhr{% endif %}. Nachtdruck erst danach starten.
+              {%- endif %}
+              {%- if offen | length == 0 %}
+
+              ✅ Nichts Offenes in der Warteschlange.
+              {%- elif ns.l | length == 0 %}
+
+              ⚠️ Kein offener Druck passt sicher in die Nacht (Dauer + 15 min Reserve) und hat eine passende Spule.
+              {%- else %}
+              {%- set best = ns.l | sort(attribute='dauer_s', reverse=true) | first %}
+              {%- set d = best.dauer_s | int(0) %}
+
+              🌙 **Vorschlag für heute Nacht:** {{ best.datei }}<br>
+              {{ d // 3600 }}h {{ '%02d' | format((d % 3600) // 60) }}m · {{ best.gewicht_g }} g {{ best.material }} · Start {{ uhr(von) }} → fertig ca. {{ uhr(von + d / 3600) }} Uhr<br>
+              <small>{{ (best.pruefung or []) | join(' · ') }}</small>
+              {%- endif %}
+              {%- if offen | length > 1 %}
+
+              <small>Alle offenen Dateien:</small>
+              <table>
+              {%- for f in offen | sort(attribute='dauer_s', reverse=true) %}
+              {%- set d = f.dauer_s | int(0) %}
+              {%- set passt = d + reserve <= fenster %}
+              {%- set spule = (f.pruefung or [])[0:1] | select('match', '^✅') | list | length > 0 %}
+              <tr><td>{{ '✅' if passt and spule else '➖' }}</td><td>{{ f.datei }}</td><td>{{ d // 3600 }}h {{ '%02d' | format((d % 3600) // 60) }}m</td><td>{{ 'passt' if passt else 'zu lang' }}{{ '' if spule else ' · Spule prüfen' }}</td></tr>
+              {%- endfor %}
+              </table>
+              {%- endif %}
           - type: tile
             entity: input_select.pm_druck_verwerfen_auswahl
             name: Druck verwerfen
@@ -122,20 +169,6 @@ views:
             grid_options:
               columns: 4
               rows: 2
-          - type: heading
-            heading: Letzte Drucke
-            icon: mdi:history
-          - type: markdown
-            content: |-
-              {%- set icons = {'completed':'✅','cancelled':'❌','error':'⚠️','in_progress':'🖨️','klippy_shutdown':'⚠️','klippy_disconnect':'⚠️','interrupted':'⚠️'} -%}
-              <table>
-              {%- for j in (state_attr('sensor.pm_druckhistorie','jobs') or []) %}
-              {%- set t = (j.metadata.thumbnails if j.metadata and j.metadata.thumbnails else []) | selectattr('width','eq',300) | list -%}
-              {%- set d = j.total_duration | int(0) %}
-              <tr><td>{% if t %}<img src="/local/print_manager/thumbs/{{ t[0].relative_path.split('/')[-1] | replace(' ','%20') }}" width="56">{% endif %}</td>
-              <td><b>{{ j.filename.split('/')[-1] | replace('.gcode','') }}</b><br>{{ icons.get(j.status,'•') }} {{ j.start_time | timestamp_custom('%d.%m. %H:%M') }} · {% if j.status == 'in_progress' %}läuft gerade{% else %}{{ d // 3600 }}h {{ '%02d' | format((d % 3600) // 60) }}m · {{ ((j.filament_used or 0) / 1000) | round(1) }} m{% endif %}</td></tr>
-              {%- endfor %}
-              </table>
 
       - type: grid
         cards:
@@ -243,6 +276,20 @@ views:
                 name: Kosten
               - entity: input_select.pm_ergebnis_letzter_druck
                 name: Ergebnis (umbuchen)
+          - type: heading
+            heading: Letzte Drucke
+            icon: mdi:history
+          - type: markdown
+            content: |-
+              {%- set icons = {'completed':'✅','cancelled':'❌','error':'⚠️','in_progress':'🖨️','klippy_shutdown':'⚠️','klippy_disconnect':'⚠️','interrupted':'⚠️'} -%}
+              <table>
+              {%- for j in (state_attr('sensor.pm_druckhistorie','jobs') or []) %}
+              {%- set t = (j.metadata.thumbnails if j.metadata and j.metadata.thumbnails else []) | selectattr('width','eq',300) | list -%}
+              {%- set d = j.total_duration | int(0) %}
+              <tr><td>{% if t %}<img src="/local/print_manager/thumbs/{{ t[0].relative_path.split('/')[-1] | replace(' ','%20') }}" width="56">{% endif %}</td>
+              <td><b>{{ j.filename.split('/')[-1] | replace('.gcode','') }}</b><br>{{ icons.get(j.status,'•') }} {{ j.start_time | timestamp_custom('%d.%m. %H:%M') }} · {% if j.status == 'in_progress' %}läuft gerade{% else %}{{ d // 3600 }}h {{ '%02d' | format((d % 3600) // 60) }}m · {{ ((j.filament_used or 0) / 1000) | round(1) }} m{% endif %}</td></tr>
+              {%- endfor %}
+              </table>
 
   # ===========================================================================
   - title: Aufträge
@@ -779,6 +826,10 @@ views:
                 name: Bevorzugte Händler (Komma-getrennt, z. B. Amazon,Polymaker,Sunlu)
               - entity: input_number.pm_tage_warteschlange
                 name: Zeitraum "Noch zu drucken"
+              - entity: input_number.pm_nacht_start
+                name: Nachtdruck Start (Uhr, z. B. 22 oder 22,5)
+              - entity: input_number.pm_nacht_ende
+                name: Nachtdruck spätestens fertig (Uhr)
           - type: heading
             heading: Kosten (Fallback)
             icon: mdi:cash
