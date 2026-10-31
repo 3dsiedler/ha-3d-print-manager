@@ -1,0 +1,1864 @@
+###############################################################################
+#  3D Print Manager für Home Assistant
+#  Version: 0.1.0-beta
+#  Repository: https://github.com/3dsiedler/ha-3d-print-manager
+#  Lizenz: GPL-3.0
+#
+#  Voraussetzungen:
+#    - Klipper-Drucker mit Moonraker (getestet: Sovol SV08)
+#    - Moonraker-Integration in Home Assistant (HACS: "Moonraker")
+#    - Spoolman oder FilaMan (Spoolman-kompatible API), mit Moonraker verbunden
+#    - optional: Steckdose mit Energiezähler für den Drucker
+#    - optional: KI-Integration mit "AI Task" (Fotoerkennung Typenschild)
+#
+#  Installation: siehe README.md
+#
+#  >>> ANPASSEN: nur Abschnitt 1 ("Druckeranbindung") <<<
+#  Alle anderen Einstellungen (Moonraker-URL, Spoolman-URL, Lagerorte …)
+#  werden nach dem Neustart im Dashboard unter "Einstellungen" eingetragen.
+###############################################################################
+
+template:
+  #############################################################################
+  # 1. DRUCKERANBINDUNG – hier die Entitäten DEINES Druckers eintragen.
+  #    Beispiel Sovol SV08: Präfix "sovol_sv08". Bei anderem Druckernamen
+  #    einfach "sovol_sv08" durch dein Präfix ersetzen (Suchen & Ersetzen
+  #    NUR in diesem Abschnitt).
+  #############################################################################
+  - sensor:
+      - name: "PM Druckstatus"
+        unique_id: pm_druckstatus
+        icon: mdi:printer-3d
+        state: "{{ states('sensor.sovol_sv08_current_print_state') }}"
+        availability: "{{ has_value('sensor.sovol_sv08_current_print_state') }}"
+
+      - name: "PM Fortschritt"
+        unique_id: pm_fortschritt
+        icon: mdi:progress-clock
+        unit_of_measurement: "%"
+        state: "{{ states('sensor.sovol_sv08_progress') | float(0) | round(1) }}"
+        availability: "{{ has_value('sensor.sovol_sv08_progress') }}"
+
+      - name: "PM Restzeit"
+        unique_id: pm_restzeit
+        icon: mdi:timer-sand
+        unit_of_measurement: "h"
+        device_class: duration
+        state: "{{ states('sensor.sovol_sv08_print_time_left') | float(0) | round(2) }}"
+        availability: "{{ has_value('sensor.sovol_sv08_print_time_left') }}"
+
+      - name: "PM Druckende"
+        unique_id: pm_druckende
+        icon: mdi:flag-checkered
+        device_class: timestamp
+        state: "{{ states('sensor.sovol_sv08_print_eta') }}"
+        availability: "{{ has_value('sensor.sovol_sv08_print_eta') }}"
+
+      - name: "PM Dateiname"
+        unique_id: pm_dateiname
+        icon: mdi:file-code-outline
+        state: "{{ states('sensor.sovol_sv08_filename') }}"
+        availability: "{{ has_value('sensor.sovol_sv08_filename') }}"
+
+      - name: "PM Schicht"
+        unique_id: pm_schicht
+        icon: mdi:layers-outline
+        state: "{{ states('sensor.sovol_sv08_current_layer') | int(0) }}"
+        availability: "{{ has_value('sensor.sovol_sv08_current_layer') }}"
+
+      - name: "PM Schichten gesamt"
+        unique_id: pm_schichten_gesamt
+        icon: mdi:layers-triple-outline
+        state: "{{ states('sensor.sovol_sv08_total_layer') | int(0) }}"
+        availability: "{{ has_value('sensor.sovol_sv08_total_layer') }}"
+
+      # Filamentverbrauch des laufenden Drucks in Metern (Moonraker "Filament Used")
+      - name: "PM Filament verbraucht"
+        unique_id: pm_filament_verbraucht
+        icon: mdi:printer-3d-nozzle-outline
+        unit_of_measurement: "m"
+        state_class: total_increasing
+        state: "{{ states('sensor.sovol_sv08_filament_used') | float(0) }}"
+        availability: "{{ has_value('sensor.sovol_sv08_filament_used') }}"
+
+      # Druckdauer des laufenden Drucks in Minuten
+      - name: "PM Druckdauer"
+        unique_id: pm_druckdauer
+        icon: mdi:timer-outline
+        unit_of_measurement: "min"
+        state: "{{ states('sensor.sovol_sv08_print_duration') | float(0) | round(1) }}"
+        availability: "{{ has_value('sensor.sovol_sv08_print_duration') }}"
+
+      # Energiezähler (kWh, steigend) der Drucker-Steckdose.
+      # Ohne Steckdose: so lassen – die Stromkosten werden dann über den
+      # Erfahrungswert "kWh pro Druckstunde" geschätzt.
+      - name: "PM Energie Drucker"
+        unique_id: pm_energie_drucker
+        icon: mdi:lightning-bolt
+        unit_of_measurement: "kWh"
+        device_class: energy
+        state_class: total_increasing
+        state: "{{ states('sensor.3d_sovol_sv08_energy') | float(0) }}"
+        availability: "{{ has_value('sensor.3d_sovol_sv08_energy') }}"
+
+      # Strompreis in EUR/kWh. Standard: das Eingabefeld "Strompreis (manuell)".
+      # Wer einen dynamischen Strompreis-Sensor hat, trägt ihn hier ein.
+      - name: "PM Strompreis"
+        unique_id: pm_strompreis
+        icon: mdi:currency-eur
+        unit_of_measurement: "EUR/kWh"
+        state: "{{ states('input_number.pm_strompreis_manuell') | float(0) }}"
+  #############################################################################
+  # ENDE Druckeranbindung – ab hier nichts mehr ändern
+  #############################################################################
+
+  # Laufende Kosten des aktuellen Drucks
+  - sensor:
+      - name: "PM Filament aktueller Druck"
+        unique_id: pm_filament_aktueller_druck
+        icon: mdi:weight-gram
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        state: "{{ states('input_number.pm_filament_laufender_druck') | float(0) | round(1) }}"
+      - name: "PM Filamentkosten aktueller Druck"
+        unique_id: pm_filamentkosten_aktueller_druck
+        icon: mdi:cash
+        unit_of_measurement: "EUR"
+        device_class: monetary
+        state: "{{ states('input_number.pm_filamentkosten_laufender_druck') | float(0) | round(2) }}"
+      - name: "PM Stromkosten aktueller Druck"
+        unique_id: pm_stromkosten_aktueller_druck
+        icon: mdi:cash
+        unit_of_measurement: "EUR"
+        device_class: monetary
+        state: "{{ states('input_number.pm_stromkosten_laufender_druck') | float(0) | round(2) }}"
+      - name: "PM Druckkosten aktueller Druck"
+        unique_id: pm_druckkosten_aktueller_druck
+        icon: mdi:cash-multiple
+        unit_of_measurement: "EUR"
+        device_class: monetary
+        state: >-
+          {{ (states('input_number.pm_filamentkosten_laufender_druck') | float(0)
+            + states('input_number.pm_stromkosten_laufender_druck') | float(0)) | round(2) }}
+
+utility_meter:
+  pm_energie_aktueller_druck:
+    name: "PM Energie aktueller Druck"
+    unique_id: pm_energie_aktueller_druck
+    source: sensor.pm_energie_drucker
+    periodically_resetting: true
+
+###############################################################################
+# 2. EINSTELLUNGEN & HELFER (Werte im Dashboard pflegen)
+###############################################################################
+input_text:
+  pm_moonraker_url:
+    name: "PM Moonraker-URL"
+    icon: mdi:printer-3d
+    max: 255
+  pm_spoolman_api:
+    name: "PM Spoolman-API-URL"
+    icon: mdi:spool
+    max: 255
+  pm_lagerorte:
+    name: "PM Lagerorte (Komma-getrennt)"
+    icon: mdi:warehouse
+    max: 255
+  pm_plaetze:
+    name: "PM Druckerplätze (Komma-getrennt, Kapazität mit :2)"
+    icon: mdi:printer-3d-nozzle
+    max: 255
+  pm_lager_wareneingang:
+    name: "PM Lagerort für Wareneingang"
+    icon: mdi:package-down
+    max: 100
+  pm_ki_entity:
+    name: "PM KI für Fotoerkennung (ai_task-Entität)"
+    icon: mdi:robot-outline
+    max: 100
+  pm_kalk_kunde:
+    name: "PM Kalk Kunde"
+    icon: mdi:account
+    max: 100
+  pm_kalk_bezeichnung:
+    name: "PM Kalk Bezeichnung"
+    icon: mdi:tag-text-outline
+    max: 120
+  pm_we_hersteller:
+    name: "PM WE Hersteller"
+    icon: mdi:factory
+    max: 60
+  pm_we_material:
+    name: "PM WE Material"
+    icon: mdi:printer-3d-nozzle-outline
+    max: 60
+  pm_we_farbe:
+    name: "PM WE Farbe"
+    icon: mdi:palette
+    max: 80
+  pm_we_farbcode:
+    name: "PM WE Farbcode"
+    icon: mdi:pound
+    max: 7
+  pm_we_barcode:
+    name: "PM WE Barcode"
+    icon: mdi:barcode
+    max: 30
+
+input_number:
+  pm_tage_warteschlange:
+    name: "PM Zeitraum Druckwarteschlange"
+    icon: mdi:calendar-range
+    min: 1
+    max: 60
+    step: 1
+    unit_of_measurement: "Tage"
+    mode: box
+  pm_strompreis_manuell:
+    name: "PM Strompreis (manuell)"
+    icon: mdi:currency-eur
+    min: 0
+    max: 5
+    step: 0.0001
+    unit_of_measurement: "EUR/kWh"
+    mode: box
+  pm_filamentpreis:
+    name: "PM Filamentpreis (Fallback)"
+    icon: mdi:currency-eur
+    min: 0
+    max: 500
+    step: 0.1
+    unit_of_measurement: "EUR/kg"
+    mode: box
+  pm_filamentdichte:
+    name: "PM Filamentdichte (Fallback)"
+    icon: mdi:weight-gram
+    min: 0.5
+    max: 3
+    step: 0.01
+    unit_of_measurement: "g/cm³"
+    mode: box
+  pm_maschinenstundensatz:
+    name: "PM Maschinenstundensatz"
+    icon: mdi:printer-3d
+    min: 0
+    max: 100
+    step: 0.05
+    unit_of_measurement: "EUR/h"
+    mode: box
+  pm_lohnstundensatz:
+    name: "PM Lohnstundensatz"
+    icon: mdi:account-hard-hat
+    min: 0
+    max: 300
+    step: 0.5
+    unit_of_measurement: "EUR/h"
+    mode: box
+  pm_konstruktionsstundensatz:
+    name: "PM Konstruktionsstundensatz"
+    icon: mdi:pencil-ruler
+    min: 0
+    max: 300
+    step: 0.5
+    unit_of_measurement: "EUR/h"
+    mode: box
+  pm_gewinnaufschlag:
+    name: "PM Gewinnaufschlag"
+    icon: mdi:percent-outline
+    min: 0
+    max: 500
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+  pm_mindestbestand_je_sorte:
+    name: "PM Mindestbestand je Sorte"
+    icon: mdi:package-down
+    min: 0
+    max: 20000
+    step: 50
+    unit_of_measurement: "g"
+    mode: box
+  pm_energie_pro_druckstunde:
+    name: "PM Energie pro Druckstunde"
+    icon: mdi:lightning-bolt-outline
+    min: 0
+    max: 2
+    step: 0.001
+    unit_of_measurement: "kWh/h"
+    mode: box
+  # laufender Druck / Kostenbuchung
+  pm_filament_laufender_druck:
+    name: "PM Filament laufender Druck"
+    icon: mdi:weight-gram
+    min: 0
+    max: 100000
+    step: 0.01
+    unit_of_measurement: "g"
+    mode: box
+  pm_filamentkosten_laufender_druck:
+    name: "PM Filamentkosten laufender Druck"
+    icon: mdi:cash
+    min: 0
+    max: 100000
+    step: 0.0001
+    unit_of_measurement: "EUR"
+    mode: box
+  pm_stromkosten_laufender_druck:
+    name: "PM Stromkosten laufender Druck"
+    icon: mdi:cash
+    min: 0
+    max: 100000
+    step: 0.0001
+    unit_of_measurement: "EUR"
+    mode: box
+  pm_kosten_letzter_druck:
+    name: "PM Kosten letzter Druck"
+    icon: mdi:cash
+    min: 0
+    max: 100000
+    step: 0.01
+    unit_of_measurement: "EUR"
+    mode: box
+  pm_kosten_ok_drucke_gesamt:
+    name: "PM Kosten OK-Drucke gesamt"
+    icon: mdi:cash-check
+    min: 0
+    max: 1000000
+    step: 0.01
+    unit_of_measurement: "EUR"
+    mode: box
+  pm_kosten_fehldrucke_gesamt:
+    name: "PM Kosten Fehldrucke gesamt"
+    icon: mdi:cash-remove
+    min: 0
+    max: 1000000
+    step: 0.01
+    unit_of_measurement: "EUR"
+    mode: box
+  # Kalkulation
+  pm_kalk_gewicht:
+    name: "PM Kalk Gewicht"
+    icon: mdi:weight-gram
+    min: 0
+    max: 20000
+    step: 0.1
+    unit_of_measurement: "g"
+    mode: box
+  pm_kalk_druckzeit:
+    name: "PM Kalk Druckzeit"
+    icon: mdi:timer-outline
+    min: 0
+    max: 1000
+    step: 0.01
+    unit_of_measurement: "h"
+    mode: box
+  pm_kalk_anzahl:
+    name: "PM Kalk Anzahl"
+    icon: mdi:counter
+    min: 1
+    max: 500
+    step: 1
+    unit_of_measurement: "x"
+    mode: box
+  pm_kalk_ruestzeit:
+    name: "PM Kalk Rüstzeit"
+    icon: mdi:wrench-clock
+    min: 0
+    max: 1000
+    step: 1
+    unit_of_measurement: "min"
+    mode: box
+  pm_kalk_nacharbeit:
+    name: "PM Kalk Nacharbeit"
+    icon: mdi:hand-saw
+    min: 0
+    max: 1000
+    step: 1
+    unit_of_measurement: "min"
+    mode: box
+  pm_kalk_konstruktion:
+    name: "PM Kalk Konstruktion"
+    icon: mdi:pencil-ruler
+    min: 0
+    max: 200
+    step: 0.25
+    unit_of_measurement: "h"
+    mode: box
+  # Wareneingang
+  pm_we_anzahl:
+    name: "PM WE Anzahl"
+    icon: mdi:counter
+    min: 1
+    max: 50
+    step: 1
+    unit_of_measurement: "Rollen"
+    mode: box
+  pm_we_preis_pro_rolle:
+    name: "PM WE Preis pro Rolle"
+    icon: mdi:currency-eur
+    min: 0
+    max: 1000
+    step: 0.01
+    unit_of_measurement: "EUR"
+    mode: box
+
+input_boolean:
+  pm_kalk_intern:
+    name: "PM Kalk Intern"
+    icon: mdi:home-account
+
+counter:
+  pm_anzahl_ok_drucke:
+    name: "PM Anzahl OK-Drucke"
+    icon: mdi:check-circle-outline
+    restore: true
+  pm_anzahl_fehldrucke:
+    name: "PM Anzahl Fehldrucke"
+    icon: mdi:close-circle-outline
+    restore: true
+
+input_select:
+  pm_ergebnis_letzter_druck:
+    name: "PM Ergebnis letzter Druck"
+    icon: mdi:clipboard-check-outline
+    options: ["–", "OK", "Fehldruck"]
+  pm_druck_verwerfen_auswahl:
+    name: "PM Druck verwerfen Auswahl"
+    icon: mdi:file-cancel-outline
+    options: ["– bitte wählen –"]
+  pm_druck_zurueckholen_auswahl:
+    name: "PM Druck zurückholen Auswahl"
+    icon: mdi:file-restore-outline
+    options: ["– bitte wählen –"]
+  pm_kalk_datei:
+    name: "PM Kalk Datei"
+    icon: mdi:file-code-outline
+    options: ["manuell"]
+  pm_kalk_filament:
+    name: "PM Kalk Filament"
+    icon: mdi:printer-3d-nozzle-outline
+    options: ["– bitte wählen –"]
+  pm_auftrag_auswahl:
+    name: "PM Auftrag Auswahl"
+    icon: mdi:clipboard-list-outline
+    options: ["– bitte wählen –"]
+  pm_we_vorlage:
+    name: "PM WE Vorlage"
+    icon: mdi:content-copy
+    options: ["– neue Sorte / Foto –"]
+  pm_we_rollengroesse:
+    name: "PM WE Rollengröße"
+    icon: mdi:weight-kilogram
+    options: ["1 kg", "3 kg", "0,5 kg", "0,75 kg", "2 kg", "5 kg"]
+
+###############################################################################
+# 3. DATENQUELLEN (Moonraker / Spoolman)
+###############################################################################
+rest:
+  # aktive Spule laut Moonraker
+  - resource_template: "{{ states('input_text.pm_moonraker_url') }}/server/spoolman/spool_id"
+    scan_interval: 30
+    sensor:
+      - name: "PM Aktive Spule ID"
+        unique_id: pm_aktive_spule_id
+        icon: mdi:printer-3d-nozzle
+        value_template: >-
+          {% set s = value_json.result.spool_id %}{{ s if s is not none else 'keine' }}
+  # Details der aktiven Spule aus Spoolman
+  - resource_template: "{{ states('input_text.pm_spoolman_api') }}/spool/{{ states('sensor.pm_aktive_spule_id') }}"
+    scan_interval: 60
+    sensor:
+      - name: "PM Aktive Spule Name"
+        unique_id: pm_aktive_spule_name
+        icon: mdi:label-outline
+        availability: "{{ value_json is mapping and value_json.filament is defined }}"
+        value_template: "{{ (value_json.filament.vendor.name ~ ' ' ~ value_json.filament.name) | trim }}"
+      - name: "PM Aktive Spule Restgewicht"
+        unique_id: pm_aktive_spule_restgewicht
+        icon: mdi:spool
+        unit_of_measurement: "g"
+        device_class: weight
+        state_class: measurement
+        availability: "{{ value_json is mapping and value_json.remaining_weight is number }}"
+        value_template: "{{ value_json.remaining_weight | round(0) }}"
+      - name: "PM Aktive Spule Rest Prozent"
+        unique_id: pm_aktive_spule_rest_prozent
+        icon: mdi:spool
+        unit_of_measurement: "%"
+        state_class: measurement
+        availability: >-
+          {{ value_json is mapping and value_json.remaining_weight is number
+             and ((value_json.initial_weight or (value_json.filament | default({})).weight) | float(0)) > 0 }}
+        value_template: >-
+          {{ (value_json.remaining_weight / (value_json.initial_weight or value_json.filament.weight) * 100) | round(0) }}
+      - name: "PM Aktive Spule Material"
+        unique_id: pm_aktive_spule_material
+        icon: mdi:printer-3d-nozzle-outline
+        availability: "{{ value_json is mapping and value_json.filament is defined }}"
+        value_template: "{{ value_json.filament.material | default('unbekannt') }}"
+      - name: "PM Aktive Spule Farbe"
+        unique_id: pm_aktive_spule_farbe
+        icon: mdi:palette
+        availability: "{{ value_json is mapping and value_json.filament is defined }}"
+        value_template: "{{ '#' ~ value_json.filament.color_hex if value_json.filament.color_hex else 'unbekannt' }}"
+      - name: "PM Aktive Spule Dichte"
+        unique_id: pm_aktive_spule_dichte
+        icon: mdi:weight-gram
+        unit_of_measurement: "g/cm³"
+        availability: "{{ value_json is mapping and (value_json.filament | default({})).density is number }}"
+        value_template: "{{ value_json.filament.density }}"
+      - name: "PM Aktive Spule Preis pro kg"
+        unique_id: pm_aktive_spule_preis_pro_kg
+        icon: mdi:currency-eur
+        unit_of_measurement: "EUR/kg"
+        availability: >-
+          {{ value_json is mapping and ((value_json.price or (value_json.filament | default({})).price) | float(0)) > 0
+             and ((value_json.filament | default({})).weight | float(0)) > 0 }}
+        value_template: >-
+          {{ ((value_json.price or value_json.filament.price) / value_json.filament.weight * 1000) | round(2) }}
+  # letzte 10 Drucke
+  - resource_template: "{{ states('input_text.pm_moonraker_url') }}/server/history/list?limit=10&order=desc"
+    scan_interval: 120
+    sensor:
+      - name: "PM Druckhistorie"
+        unique_id: pm_druckhistorie
+        icon: mdi:history
+        unit_of_measurement: "Drucke"
+        availability: "{{ value_json is mapping and value_json.result is defined }}"
+        value_template: "{{ value_json.result.count }}"
+        json_attributes_path: "$.result"
+        json_attributes:
+          - jobs
+
+command_line:
+  # Lagerübersicht aus Spoolman (Plätze am Drucker + Lagerorte)
+  - sensor:
+      name: "PM Filament Lager"
+      unique_id: pm_filament_lager
+      icon: mdi:warehouse
+      scan_interval: 300
+      command_timeout: 30
+      command: |-
+        python3 - "{{ states('input_text.pm_spoolman_api') }}" "{{ states('input_text.pm_lagerorte') }}" "{{ states('input_text.pm_plaetze') }}" <<'PYEOF'
+        import json, sys, urllib.request, collections, datetime
+        API, LAGER_TXT, PLAETZE_TXT = sys.argv[1].rstrip("/"), sys.argv[2], sys.argv[3]
+        LAGER = [x.strip() for x in LAGER_TXT.split(",") if x.strip()]
+        PLAETZE, KAPAZITAET = [], {}
+        for x in PLAETZE_TXT.split(","):
+            x = x.strip()
+            if not x:
+                continue
+            name, _, kap = x.partition(":")
+            PLAETZE.append(name.strip())
+            KAPAZITAET[name.strip()] = int(kap) if kap.strip().isdigit() else 1
+        try:
+            data = json.load(urllib.request.urlopen(API + "/spool?limit=1000", timeout=15))
+        except Exception as e:
+            print(json.dumps({"fehler": str(e)}))
+            raise SystemExit
+        orte = collections.OrderedDict()
+        for o in PLAETZE + LAGER:
+            orte[o] = []
+        gesamt_g = 0
+        for s in data:
+            if s.get("archived"):
+                continue
+            f = s.get("filament") or {}
+            v = (f.get("vendor") or {}).get("name", "")
+            rest = round(s.get("remaining_weight") or 0)
+            gesamt_g += rest
+            gew = s.get("initial_weight") or f.get("weight") or 1000
+            ort = (s.get("location") or "").strip() or "Ohne Lagerort"
+            orte.setdefault(ort, []).append({"id": s.get("id"), "name": (v + " " + (f.get("name") or "")).strip(),
+                "material": f.get("material") or "?", "hex": f.get("color_hex") or "", "rest_g": rest, "gewicht": round(gew)})
+        plaetze, warnungen, lager, ohne_lagerort = [], [], {}, 0
+        for ort, spulen in orte.items():
+            if ort in LAGER:
+                gruppen = collections.OrderedDict()
+                for sp in spulen:
+                    k = (sp["material"], sp["name"], sp["hex"])
+                    g = gruppen.setdefault(k, {"typ": sp["material"], "farbe": sp["name"], "hex": sp["hex"], "spulen": 0, "rest_g": 0})
+                    g["spulen"] += 1
+                    g["rest_g"] += sp["rest_g"]
+                lager[ort] = {"spulen": len(spulen), "rest_g": sum(sp["rest_g"] for sp in spulen),
+                              "gruppen": sorted(gruppen.values(), key=lambda x: (x["typ"], x["farbe"]))}
+            elif ort == "Ohne Lagerort":
+                ohne_lagerort = len(spulen)
+            else:
+                kap = KAPAZITAET.get(ort, 1)
+                belegt = sum(2 if sp["gewicht"] > 1500 else 1 for sp in spulen) if kap > 1 else len(spulen)
+                warn = belegt > kap
+                if warn:
+                    warnungen.append(ort + ": " + str(len(spulen)) + " Spulen (" + ", ".join(sp["name"] + " " + str(sp["gewicht"]) + " g" for sp in spulen) + ")")
+                plaetze.append({"ort": ort, "anzahl": len(spulen), "kapazitaet": kap, "warnung": warn, "spulen": spulen})
+        print(json.dumps({"stand": datetime.datetime.now().strftime("%d.%m.%Y %H:%M"), "gesamt_spulen": sum(len(v) for v in orte.values()),
+            "gesamt_g": gesamt_g, "ohne_lagerort": ohne_lagerort, "plaetze": plaetze, "lager": lager, "warnungen": warnungen}))
+        PYEOF
+      value_template: "{{ value_json.warnungen | length if value_json.warnungen is defined else 'unknown' }}"
+      json_attributes:
+        - stand
+        - gesamt_spulen
+        - gesamt_g
+        - ohne_lagerort
+        - plaetze
+        - lager
+        - warnungen
+        - fehler
+
+  # Druckwarteschlange, Filamentprüfung, Vorschaubilder, Kalkulationsdaten
+  - sensor:
+      name: "PM Druckwarteschlange"
+      unique_id: pm_druckwarteschlange
+      icon: mdi:tray-full
+      scan_interval: 300
+      command_timeout: 120
+      unit_of_measurement: "Dateien"
+      command: |-
+        python3 - "{{ states('input_text.pm_moonraker_url') }}" "{{ states('input_text.pm_spoolman_api') }}" "{{ states('input_number.pm_tage_warteschlange') | int(5) }}" "{{ states('input_text.pm_lagerorte') }}" <<'PYEOF'
+        import json, os, re, sys, time, urllib.request, urllib.parse
+        BASE, SPOOLMAN_API = sys.argv[1].rstrip("/"), sys.argv[2].rstrip("/")
+        TAGE = int(sys.argv[3] or 5)
+        LAGER = [x.strip() for x in sys.argv[4].split(",") if x.strip()]
+        DATEN_DIR = "/config/print_manager"
+        THUMB_DIR = "/config/www/print_manager/thumbs"
+        AUFTRAEGE = DATEN_DIR + "/auftraege.json"
+        KALK = DATEN_DIR + "/kalkulation.json"
+        VERWORFEN = "verworfen/"
+        ORCA_STANDARDFARBE = "26A69A"
+        FARB_TOLERANZ = 40
+        os.makedirs(DATEN_DIR, exist_ok=True)
+        os.makedirs(THUMB_DIR, exist_ok=True)
+        def get(path):
+            return json.load(urllib.request.urlopen(BASE + path, timeout=10))["result"]
+        def norm(s):
+            s = (s or "").lower().replace("+", " plus ").replace("plus", " plus ")
+            return " ".join(re.sub(r"[^a-z0-9.]+", " ", s).split())
+        def hexnorm(h):
+            h = (h or "").strip().strip('"').lstrip("#").upper()
+            return h[:6] if re.fullmatch(r"[0-9A-F]{6}([0-9A-F]{2})?", h) else ""
+        def abstand(a, b):
+            return sum((int(a[i:i + 2], 16) - int(b[i:i + 2], 16)) ** 2 for i in (0, 2, 4)) ** 0.5
+        def thumb(pfad, meta):
+            t = [x for x in ((meta or {}).get("thumbnails") or []) if x.get("width") == 300]
+            if not t:
+                return None
+            rel = t[0]["relative_path"]
+            name = rel.split("/")[-1]
+            ziel = os.path.join(THUMB_DIR, name)
+            if not os.path.exists(ziel):
+                ordner = pfad.rsplit("/", 1)[0] + "/" if "/" in pfad else ""
+                try:
+                    urllib.request.urlretrieve(BASE + "/server/files/gcodes/" + urllib.parse.quote(ordner + rel), ziel)
+                except Exception:
+                    return None
+            return name
+        def gcode_ende(p):
+            w = {}
+            req = urllib.request.Request(BASE + "/server/files/gcodes/" + urllib.parse.quote(p), headers={"Range": "bytes=-200000"})
+            for line in urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore").splitlines():
+                if line.startswith("; ") and " = " in line:
+                    k, _, v = line[2:].partition(" = ")
+                    if k in ("filament_settings_id", "filament_vendor", "filament_type", "filament_colour"):
+                        w[k] = v.split(";")[0].strip().strip('"')
+            return w
+        def passt(sp, job, hersteller=None):
+            if sp is None or sp["mat"] != job["mat"]:
+                return False
+            if job["hex"] and (not sp["hex"] or abstand(sp["hex"], job["hex"]) > FARB_TOLERANZ):
+                return False
+            if hersteller is not None and sp["hersteller"].lower() != hersteller.lower():
+                return False
+            return True
+        def ort(sp):
+            return ("📦 " if sp["ort"] in LAGER else "📍 ") + sp["ort"] + ": " + sp["name"] + " (#" + str(sp["id"]) + ", " + str(round(sp["rest"])) + " g)"
+        def sortiert(lst):
+            return sorted(lst, key=lambda s: (s["ort"] in LAGER, s["rest"]))
+        try:
+            grenze = time.time() - TAGE * 86400
+            alle = [f for f in get("/server/files/list?root=gcodes") if f["path"].lower().endswith(".gcode")]
+            dateien = [f for f in alle if f.get("modified", 0) >= grenze and not f["path"].startswith(VERWORFEN)]
+            verworfen = [f["path"][len(VERWORFEN):] for f in sorted(alle, key=lambda x: -x.get("modified", 0)) if f["path"].startswith(VERWORFEN)][:25]
+            jobs = get("/server/history/list?limit=500&order=desc&since=" + str(int(grenze)))["jobs"]
+            letzte10 = get("/server/history/list?limit=10&order=desc")["jobs"]
+            aktiv_id = get("/server/spoolman/spool_id").get("spool_id")
+            q = get("/printer/objects/query?virtual_sdcard&print_stats")["status"]
+            fortschritt = float(q["virtual_sdcard"].get("progress") or 0)
+            laufend = q["print_stats"].get("filename") or ""
+            spulen = []
+            for s in json.load(urllib.request.urlopen(SPOOLMAN_API + "/spool?limit=1000", timeout=15)):
+                if s.get("archived") or (s.get("remaining_weight") or 0) <= 0:
+                    continue
+                fi = s.get("filament") or {}
+                v = ((fi.get("vendor") or {}).get("name") or "").strip()
+                spulen.append({"id": s["id"], "fid": fi.get("id"), "hersteller": v, "mat": norm(fi.get("material")), "hex": hexnorm(fi.get("color_hex")),
+                               "name": (v + " " + (fi.get("name") or "")).strip(), "rest": float(s.get("remaining_weight") or 0),
+                               "ort": (s.get("location") or "").strip() or "ohne Lagerort"})
+            filamente_roh = json.load(urllib.request.urlopen(SPOOLMAN_API + "/filament", timeout=15))
+        except Exception as e:
+            print(json.dumps({"fehler": str(e), "dateien": [], "verworfen": []}))
+            raise SystemExit
+        # Vorschaubilder der letzten 10 Drucke
+        for j in letzte10:
+            thumb(j.get("filename") or "", j.get("metadata"))
+        start = {s["id"]: s["rest"] for s in spulen}
+        aktiv = next((s for s in spulen if s["id"] == aktiv_id), None)
+        aktiv_txt = ort(aktiv) if aktiv else "keine"
+        erledigt = {j["filename"] for j in jobs if j.get("status") == "completed"}
+        letzter, versuche = {}, {}
+        for j in jobs:
+            letzter.setdefault(j["filename"], j.get("status"))
+            versuche[j["filename"]] = versuche.get(j["filename"], 0) + 1
+        liste = []
+        for f in dateien:
+            p = f["path"]
+            if p in erledigt:
+                continue
+            e = {"datei": p.split("/")[-1][:-6], "pfad": p, "hochgeladen": int(f["modified"]),
+                 "status": letzter.get(p, "offen"), "versuche": versuche.get(p, 0), "mat": "", "hex": "", "material": "", "gewicht_g": 0}
+            if e["status"] == "in_progress" and p != laufend:
+                e["status"] = "unterbrochen"
+            try:
+                m = get("/server/files/metadata?filename=" + urllib.parse.quote(p))
+                e["dauer_s"] = int(m.get("estimated_time") or 0)
+                e["gewicht_g"] = round(m.get("filament_weight_total") or 0, 1)
+                b = thumb(p, m)
+                if b:
+                    e["bild"] = b
+                g = gcode_ende(p)
+                hersteller = g.get("filament_vendor", "")
+                basis = g.get("filament_settings_id", "").split("@")[0].strip()
+                if hersteller and basis.lower().startswith(hersteller.lower()):
+                    basis = basis[len(hersteller):].strip()
+                e["mat"] = norm(basis) or norm(g.get("filament_type") or m.get("filament_type"))
+                e["material"] = (basis or g.get("filament_type") or m.get("filament_type") or "?")
+                e["slicer_hersteller"] = hersteller
+                h = hexnorm(g.get("filament_colour"))
+                e["hex"] = "" if h == ORCA_STANDARDFARBE else h
+            except Exception:
+                pass
+            liste.append(e)
+        reihe = [x for x in liste if x["status"] == "in_progress"] + sorted([x for x in liste if x["status"] != "in_progress"], key=lambda x: x["hochgeladen"])
+        cur = aktiv
+        wechsel = 0
+        for job in reihe:
+            z = []
+            bedarf = job["gewicht_g"] * (1 - fortschritt) if job["status"] == "in_progress" else job["gewicht_g"]
+            job["bedarf_g"] = round(bedarf)
+            job["aktion"] = False
+            if not job["mat"] or bedarf <= 0:
+                z.append("❔ Kein Material/Bedarf in der Datei gefunden")
+            elif passt(cur, job):
+                if cur["rest"] >= bedarf:
+                    z.append("✅ Aktive Spule reicht – danach ca. " + str(round(cur["rest"] - bedarf)) + " g übrig")
+                    cur["rest"] -= bedarf
+                else:
+                    job["aktion"] = True
+                    fehlt = bedarf - cur["rest"]
+                    z.append("⚠️ Aktive Spule reicht nicht: " + str(round(cur["rest"])) + " g da, " + str(round(bedarf)) + " g nötig")
+                    mitte = sortiert([s for s in spulen if s is not cur and passt(s, job, cur["hersteller"]) and s["rest"] >= fehlt])
+                    vorher = [] if job["status"] == "in_progress" else sortiert([s for s in spulen if s is not cur and passt(s, job) and s["rest"] >= bedarf])
+                    if mitte:
+                        z.append("🔁 Rollenwechsel im Druck – nur " + cur["hersteller"] + ", mind. " + str(round(fehlt)) + " g:")
+                        z += [ort(s) for s in mitte[:3]]
+                    else:
+                        z.append("❗ Keine passende Rolle von " + cur["hersteller"] + " mit mind. " + str(round(fehlt)) + " g für den Wechsel im Druck")
+                    if vorher:
+                        z.append("🔄 oder vorher komplett wechseln auf:")
+                        z += [ort(s) for s in vorher[:3]]
+                    if mitte:
+                        cur["rest"] = 0
+                        cur = mitte[0]
+                        cur["rest"] -= fehlt
+                    elif vorher:
+                        cur = vorher[0]
+                        cur["rest"] -= bedarf
+                    else:
+                        cur = None
+            else:
+                job["aktion"] = True
+                z.append("🔄 Spulenwechsel nötig – " + (job["slicer_hersteller"] + " " if job.get("slicer_hersteller") else "") + job["material"] + (" #" + job["hex"] if job["hex"] else ""))
+                vorher = sortiert([s for s in spulen if s is not cur and passt(s, job) and s["rest"] >= bedarf])
+                if vorher:
+                    z += [ort(s) for s in vorher[:4]]
+                    cur = vorher[0]
+                    cur["rest"] -= bedarf
+                else:
+                    kette = None
+                    for hst in sorted({s["hersteller"] for s in spulen if passt(s, job)}):
+                        kand = sorted([s for s in spulen if passt(s, job, hst)], key=lambda s: -s["rest"])
+                        summe, auswahl = 0, []
+                        for s in kand:
+                            auswahl.append(s)
+                            summe += s["rest"]
+                            if summe >= bedarf:
+                                kette = (hst, auswahl)
+                                break
+                        if kette:
+                            break
+                    if kette:
+                        z.append("🔁 Keine Rolle reicht allein – nur mit Rollenwechsel im Druck (alles " + kette[0] + "):")
+                        z += [ort(s) for s in kette[1]]
+                        cur = kette[1][-1]
+                    else:
+                        z.append("❗ Keine passende Spule mit genug Filament vorhanden")
+                        cur = None
+            if job["mat"] and not job["hex"]:
+                z.append("🎨 Farbe im Slicer nicht gesetzt – nur Material/Hersteller geprüft")
+            job["pruefung"] = z
+            if job["aktion"]:
+                wechsel += 1
+        # Kalkulationsdaten: Bestand abzueglich laufender/anstehender Drucke und geplanter Auftraege
+        bestand, reserviert, anzahl = {}, {}, {}
+        for s in spulen:
+            bestand[s["fid"]] = bestand.get(s["fid"], 0) + start[s["id"]]
+            reserviert[s["fid"]] = reserviert.get(s["fid"], 0) + max(0, start[s["id"]] - max(s["rest"], 0))
+            anzahl[s["fid"]] = anzahl.get(s["fid"], 0) + 1
+        filamente = []
+        for f in filamente_roh:
+            v = ((f.get("vendor") or {}).get("name") or "").strip()
+            w = f.get("weight") or 1000
+            preis = f.get("price")
+            filamente.append({"id": f["id"], "label": "#" + str(f["id"]) + " " + (v + " " + (f.get("name") or "")).strip() + " (" + (f.get("material") or "?") + ")",
+                              "hersteller": v, "name": f.get("name") or "", "material": f.get("material") or "", "mat": norm(f.get("material")),
+                              "hex": hexnorm(f.get("color_hex")), "rollengewicht": w, "preis_kg": round(preis / w * 1000, 2) if preis and w else None,
+                              "ean": f.get("article_number") or "", "spulen": anzahl.get(f["id"], 0),
+                              "bestand_g": round(bestand.get(f["id"], 0)), "reserviert_g": round(reserviert.get(f["id"], 0)),
+                              "verfuegbar_g": round(bestand.get(f["id"], 0) - reserviert.get(f["id"], 0))})
+        for f in filamente:
+            f["alternativen"] = [{"id": a["id"], "label": a["label"], "preis_kg": a["preis_kg"], "verfuegbar_g": a["verfuegbar_g"]}
+                                 for a in sorted(filamente, key=lambda a: (a["preis_kg"] is None, a["preis_kg"] or 0))
+                                 if a["id"] != f["id"] and a["mat"] == f["mat"] and f["hex"] and a["hex"] and abstand(a["hex"], f["hex"]) <= FARB_TOLERANZ][:3]
+        try:
+            auftraege = json.load(open(AUFTRAEGE))
+        except Exception:
+            auftraege = []
+        frei = {f["id"]: f["verfuegbar_g"] for f in filamente}
+        bedarf_auftraege = {}
+        for a in sorted(auftraege, key=lambda a: a.get("erstellt", 0)):
+            if a.get("status") != "geplant":
+                continue
+            fid, need = a.get("filament_id"), float(a.get("gewicht_g_gesamt") or 0)
+            bedarf_auftraege[fid] = bedarf_auftraege.get(fid, 0) + need
+            da = frei.get(fid, 0)
+            if da >= need:
+                a["lager"] = "✅ am Lager (danach " + str(round(da - need)) + " g frei)"
+                a["fehlt_g"] = 0
+            else:
+                a["fehlt_g"] = round(need - max(da, 0))
+                a["lager"] = "⚠️ fehlt " + str(a["fehlt_g"]) + " g – bestellen"
+            frei[fid] = da - need
+        for f in filamente:
+            f["bedarf_auftraege_g"] = round(bedarf_auftraege.get(f["id"], 0))
+            f["frei_nach_auftraegen_g"] = round(f["verfuegbar_g"] - f["bedarf_auftraege_g"])
+        gcodes = []
+        for f in sorted([f for f in alle if not f["path"].startswith(VERWORFEN)], key=lambda x: -x.get("modified", 0))[:25]:
+            try:
+                m = get("/server/files/metadata?filename=" + urllib.parse.quote(f["path"]))
+                gcodes.append({"pfad": f["path"], "gewicht_g": round(m.get("filament_weight_total") or 0, 1),
+                               "dauer_h": round((m.get("estimated_time") or 0) / 3600, 2),
+                               "profil": (m.get("filament_name") or m.get("filament_type") or "").split("@")[0].strip()})
+            except Exception:
+                pass
+        kalk = {"stand": time.strftime("%d.%m.%Y %H:%M"), "filamente": filamente, "gcodes": gcodes,
+                "auftraege": sorted(auftraege, key=lambda a: -a.get("erstellt", 0))[:30]}
+        with open(KALK + ".tmp", "w") as fh:
+            json.dump(kalk, fh, ensure_ascii=False)
+        os.replace(KALK + ".tmp", KALK)
+        print(json.dumps({"stand": time.strftime("%d.%m.%Y %H:%M"), "aktive_spule": aktiv_txt, "wechsel": wechsel, "dateien": reihe, "verworfen": verworfen}))
+        PYEOF
+      value_template: "{{ value_json.dateien | length }}"
+      json_attributes:
+        - stand
+        - aktive_spule
+        - wechsel
+        - dateien
+        - verworfen
+        - fehler
+
+  - sensor:
+      name: "PM Kalkulationsdaten"
+      unique_id: pm_kalkulationsdaten
+      icon: mdi:calculator-variant-outline
+      scan_interval: 60
+      unit_of_measurement: "Aufträge"
+      command: "cat /config/print_manager/kalkulation.json 2>/dev/null || echo '{\"auftraege\": []}'"
+      value_template: "{{ (value_json.auftraege | default([])) | selectattr('status', 'eq', 'geplant') | list | length }}"
+      json_attributes:
+        - stand
+        - filamente
+        - gcodes
+        - auftraege
+
+###############################################################################
+# 4. BEFEHLE (schreibende Aktionen)
+###############################################################################
+shell_command:
+  # G-Code in Ordner "verworfen" verschieben / zurückholen
+  pm_datei_verwerfen: |-
+    python3 -c '
+    import sys, json, urllib.request as u
+    B = sys.argv[1].rstrip("/") + "/server/files/"
+    aktion, datei = sys.argv[2], sys.argv[3]
+    def post(p, body):
+        u.urlopen(u.Request(B + p, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"}, method="POST"), timeout=15)
+    if aktion == "verwerfen":
+        try:
+            post("directory", {"path": "gcodes/verworfen"})
+        except Exception:
+            pass
+        post("move", {"source": "gcodes/" + datei, "dest": "gcodes/verworfen/" + datei.split("/")[-1]})
+    else:
+        post("move", {"source": "gcodes/verworfen/" + datei, "dest": "gcodes/" + datei})
+    ' "{{ states('input_text.pm_moonraker_url') }}" {{ aktion }} "{{ datei }}"
+
+  # Aufträge speichern / Status setzen / löschen
+  pm_auftrag: |-
+    python3 -c '
+    import sys, json, base64, os, time
+    D = "/config/print_manager"
+    F = D + "/auftraege.json"
+    os.makedirs(D, exist_ok=True)
+    a, x = sys.argv[1], sys.argv[2]
+    try:
+        d = json.load(open(F))
+    except Exception:
+        d = []
+    if a == "neu":
+        o = json.loads(base64.b64decode(x).decode())
+        o["id"] = str(int(time.time() * 1000))
+        o["erstellt"] = int(time.time())
+        o["status"] = "geplant"
+        d.append(o)
+    elif a == "loeschen":
+        d = [o for o in d if o.get("id") != x]
+    else:
+        for o in d:
+            if o.get("id") == x:
+                o["status"] = a
+                o["geaendert"] = int(time.time())
+    with open(F + ".tmp", "w") as fh:
+        json.dump(d, fh, ensure_ascii=False, indent=1)
+    os.replace(F + ".tmp", F)
+    print("ok")
+    ' {{ aktion }} "{{ wert }}"
+
+  # Rollen in Spoolman einbuchen (legt Hersteller/Sorte bei Bedarf an)
+  pm_spule_einbuchen: |-
+    python3 -c '
+    import sys, json, base64, re, urllib.request as u
+    API = sys.argv[1].rstrip("/") + "/"
+    def r(m, p, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        q = u.Request(API + p, data=data, method=m, headers={"Content-Type": "application/json"})
+        return json.load(u.urlopen(q, timeout=15))
+    def norm(s):
+        s = (s or "").lower().replace("+", " plus ").replace("plus", " plus ")
+        return " ".join(re.sub(r"[^a-z0-9.]+", " ", s).split())
+    DICHTE = {"pla": 1.24, "petg": 1.27, "pet": 1.27, "abs": 1.04, "asa": 1.07, "tpu": 1.21, "pa": 1.14, "pc": 1.2}
+    try:
+        d = json.loads(base64.b64decode(sys.argv[2]).decode())
+        herst, mat, farbe = d["hersteller"].strip(), d["material"].strip(), d["farbe"].strip()
+        hexw = (d.get("hex") or "").strip().lstrip("#").upper()
+        gew = float(d["gewicht"])
+        anz = int(float(d.get("anzahl") or 1))
+        ean = (d.get("ean") or "").strip()
+        preis = float(d.get("preis") or 0)
+        ort = d.get("ort") or "Lager"
+        if not herst or not mat or not farbe:
+            raise ValueError("Hersteller, Material und Farbe angeben")
+        fil = r("GET", "filament")
+        f = None
+        if ean:
+            f = next((x for x in fil if (x.get("article_number") or "") == ean), None)
+        if f is None:
+            for x in fil:
+                v = ((x.get("vendor") or {}).get("name") or "")
+                if v.lower() == herst.lower() and norm(x.get("material")) == norm(mat) and abs(float(x.get("weight") or 0) - gew) < 1 and (farbe.lower() in (x.get("name") or "").lower() or (hexw and (x.get("color_hex") or "").upper() == hexw)):
+                    f = x
+                    break
+        neu = False
+        if f is None:
+            ven = next((v for v in r("GET", "vendor") if v["name"].lower() == herst.lower()), None) or r("POST", "vendor", {"name": herst})
+            body = {"name": farbe, "vendor_id": ven["id"], "material": mat, "weight": gew, "diameter": 1.75, "density": DICHTE.get(norm(mat).split(" ")[0], 1.24)}
+            if hexw:
+                body["color_hex"] = hexw
+            if ean:
+                body["article_number"] = ean
+            if preis:
+                body["price"] = preis
+            f = r("POST", "filament", body)
+            neu = True
+        elif ean and not f.get("article_number"):
+            r("PATCH", "filament/" + str(f["id"]), {"article_number": ean})
+        for i in range(anz):
+            sb = {"filament_id": f["id"], "location": ort}
+            if preis:
+                sb["price"] = preis
+            r("POST", "spool", sb)
+        txt = str(anz) + "x " + herst + " " + (f.get("name") or farbe) + " (" + mat + ", " + str(int(gew)) + " g) in " + ort + " eingebucht"
+        txt += (" - neue Filamentsorte #" + str(f["id"]) + " angelegt") if neu else (" - Sorte #" + str(f["id"]))
+        print(json.dumps({"ok": True, "text": txt}))
+    except Exception as e:
+        print(json.dumps({"ok": False, "text": "Fehler beim Einbuchen: " + str(e)}))
+    ' "{{ states('input_text.pm_spoolman_api') }}" "{{ daten }}"
+
+  # neuestes Typenschild-Foto in /media/filament_fotos finden (legt Ordner an)
+  pm_neuestes_foto: |-
+    python3 -c '
+    import os
+    D = "/media/filament_fotos"
+    os.makedirs(D, exist_ok=True)
+    fs = [f for f in os.listdir(D) if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+    print(max(fs, key=lambda f: os.path.getmtime(os.path.join(D, f))) if fs else "")
+    '
+
+###############################################################################
+# 5. SKRIPTE
+###############################################################################
+script:
+  pm_druck_verwerfen:
+    alias: "PM Druck verwerfen"
+    icon: mdi:file-cancel-outline
+    description: "Verschiebt die ausgewählte G-Code-Datei auf dem Drucker in den Ordner 'verworfen' (nicht gelöscht)."
+    mode: single
+    sequence:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: input_select.pm_druck_verwerfen_auswahl
+            state: "– bitte wählen –"
+      - action: shell_command.pm_datei_verwerfen
+        data:
+          aktion: verwerfen
+          datei: "{{ states('input_select.pm_druck_verwerfen_auswahl') }}"
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_druckwarteschlange
+
+  pm_druck_zurueckholen:
+    alias: "PM Druck zurückholen"
+    icon: mdi:file-restore-outline
+    description: "Holt eine verworfene G-Code-Datei zurück in die Warteschlange."
+    mode: single
+    sequence:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: input_select.pm_druck_zurueckholen_auswahl
+            state: "– bitte wählen –"
+      - action: shell_command.pm_datei_verwerfen
+        data:
+          aktion: zurueck
+          datei: "{{ states('input_select.pm_druck_zurueckholen_auswahl') }}"
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_druckwarteschlange
+
+  pm_auftrag_speichern:
+    alias: "PM Auftrag speichern"
+    icon: mdi:content-save-plus-outline
+    description: "Speichert die aktuelle Kalkulation als geplanten Auftrag inkl. Kostenaufteilung."
+    mode: single
+    sequence:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: input_select.pm_kalk_filament
+            state: "– bitte wählen –"
+      - condition: numeric_state
+        entity_id: input_number.pm_kalk_gewicht
+        above: 0
+      - variables:
+          fil: >-
+            {{ (state_attr('sensor.pm_kalkulationsdaten','filamente') or [])
+               | selectattr('label','eq', states('input_select.pm_kalk_filament')) | list | first | default({}) }}
+      - variables:
+          n: "{{ states('input_number.pm_kalk_anzahl') | int(1) }}"
+      - variables:
+          lohn: "{{ states('input_number.pm_lohnstundensatz') | float(0) }}"
+      - variables:
+          intern: "{{ is_state('input_boolean.pm_kalk_intern', 'on') }}"
+      - variables:
+          g_ges: "{{ (states('input_number.pm_kalk_gewicht') | float(0) * n) | round(1) }}"
+      - variables:
+          h_ges: "{{ (states('input_number.pm_kalk_druckzeit') | float(0) * n) | round(2) }}"
+      - variables:
+          preis_kg: "{{ fil.preis_kg if fil.preis_kg else states('input_number.pm_filamentpreis') | float(0) }}"
+      - variables:
+          k_material: "{{ (g_ges / 1000 * preis_kg) | round(2) }}"
+      - variables:
+          k_strom: "{{ (h_ges * states('input_number.pm_energie_pro_druckstunde') | float(0) * states('sensor.pm_strompreis') | float(0)) | round(2) }}"
+      - variables:
+          k_maschine: "{{ (h_ges * states('input_number.pm_maschinenstundensatz') | float(0)) | round(2) }}"
+      - variables:
+          k_ruesten: "{{ (states('input_number.pm_kalk_ruestzeit') | float(0) / 60 * lohn) | round(2) }}"
+      - variables:
+          k_lohn: "{{ (states('input_number.pm_kalk_nacharbeit') | float(0) / 60 * lohn) | round(2) }}"
+      - variables:
+          k_konstruktion: "{{ (states('input_number.pm_kalk_konstruktion') | float(0) * states('input_number.pm_konstruktionsstundensatz') | float(0)) | round(2) }}"
+      - variables:
+          selbstkosten: "{{ (k_material + k_strom + k_maschine + k_ruesten + k_lohn + k_konstruktion) | round(2) }}"
+      - variables:
+          aufschlag: "{{ 0 if intern else (selbstkosten * states('input_number.pm_gewinnaufschlag') | float(0) / 100) | round(2) }}"
+      - variables:
+          auftrag: >-
+            {{ {'kunde': states('input_text.pm_kalk_kunde'), 'intern': intern,
+                'bezeichnung': states('input_text.pm_kalk_bezeichnung'),
+                'datei': '' if is_state('input_select.pm_kalk_datei','manuell') else states('input_select.pm_kalk_datei'),
+                'filament_id': fil.id, 'filament': fil.label, 'anzahl': n,
+                'gewicht_g_gesamt': g_ges, 'druckzeit_h_gesamt': h_ges,
+                'kosten': {'material': k_material, 'strom': k_strom, 'maschine': k_maschine, 'ruesten': k_ruesten,
+                           'lohn': k_lohn, 'konstruktion': k_konstruktion, 'selbstkosten': selbstkosten,
+                           'aufschlag': aufschlag, 'preis': (selbstkosten + aufschlag) | round(2)}} }}
+      - action: shell_command.pm_auftrag
+        data:
+          aktion: neu
+          wert: "{{ auftrag | to_json | base64_encode }}"
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_druckwarteschlange
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_kalkulationsdaten
+      - action: persistent_notification.create
+        data:
+          notification_id: pm_auftrag
+          title: "Auftrag gespeichert"
+          message: >-
+            {{ 'Intern' if intern else (auftrag.kunde or 'Kunde ?') }} – {{ auftrag.bezeichnung or auftrag.datei or 'Auftrag' }}:
+            {{ '%.2f' | format(auftrag.kosten.preis) }} € ({{ g_ges }} g, {{ h_ges }} h)
+
+  pm_auftrag_status:
+    alias: "PM Auftrag Status setzen"
+    icon: mdi:clipboard-check-outline
+    description: "Setzt den ausgewählten Auftrag auf erledigt oder löscht ihn."
+    mode: single
+    fields:
+      status:
+        name: Status
+        description: "erledigt oder loeschen"
+        required: true
+        example: erledigt
+        selector:
+          select:
+            options: ["erledigt", "loeschen"]
+    sequence:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: input_select.pm_auftrag_auswahl
+            state: "– bitte wählen –"
+      - action: shell_command.pm_auftrag
+        data:
+          aktion: "{{ status }}"
+          wert: "{{ states('input_select.pm_auftrag_auswahl').split(' | ')[0] }}"
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_druckwarteschlange
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_kalkulationsdaten
+
+  pm_kalk_zuruecksetzen:
+    alias: "PM Kalkulation zurücksetzen"
+    icon: mdi:broom
+    description: "Leert alle Eingabefelder der Auftragskalkulation."
+    mode: single
+    sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: [input_text.pm_kalk_kunde, input_text.pm_kalk_bezeichnung]
+        data:
+          value: ""
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.pm_kalk_intern
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_kalk_datei
+        data:
+          option: manuell
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_kalk_filament
+        data:
+          option: "– bitte wählen –"
+      - action: input_number.set_value
+        target:
+          entity_id:
+            - input_number.pm_kalk_gewicht
+            - input_number.pm_kalk_druckzeit
+            - input_number.pm_kalk_ruestzeit
+            - input_number.pm_kalk_nacharbeit
+            - input_number.pm_kalk_konstruktion
+        data:
+          value: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_kalk_anzahl
+        data:
+          value: 1
+
+  pm_we_zuruecksetzen:
+    alias: "PM Wareneingang zurücksetzen"
+    icon: mdi:broom
+    description: "Leert alle Felder des Wareneingangs."
+    mode: single
+    sequence:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_we_vorlage
+        data:
+          option: "– neue Sorte / Foto –"
+      - action: input_text.set_value
+        target:
+          entity_id:
+            - input_text.pm_we_hersteller
+            - input_text.pm_we_material
+            - input_text.pm_we_farbe
+            - input_text.pm_we_farbcode
+            - input_text.pm_we_barcode
+        data:
+          value: ""
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_we_rollengroesse
+        data:
+          option: "1 kg"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_we_anzahl
+        data:
+          value: 1
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_we_preis_pro_rolle
+        data:
+          value: 0
+
+  pm_filament_einbuchen:
+    alias: "PM Filament einbuchen"
+    icon: mdi:package-variant-plus
+    description: "Bucht die eingegebenen Rollen in Spoolman ein (legt Hersteller/Sorte bei Bedarf an, speichert Barcode und Preis)."
+    mode: single
+    sequence:
+      - variables:
+          daten: >-
+            {{ {'hersteller': states('input_text.pm_we_hersteller'), 'material': states('input_text.pm_we_material'),
+                'farbe': states('input_text.pm_we_farbe'), 'hex': states('input_text.pm_we_farbcode'),
+                'ean': states('input_text.pm_we_barcode'),
+                'gewicht': (states('input_select.pm_we_rollengroesse') | replace(' kg','') | replace(',','.') | float(1)) * 1000,
+                'anzahl': states('input_number.pm_we_anzahl') | int(1),
+                'preis': states('input_number.pm_we_preis_pro_rolle') | float(0),
+                'ort': states('input_text.pm_lager_wareneingang')} }}
+      - action: shell_command.pm_spule_einbuchen
+        data:
+          daten: "{{ daten | to_json | base64_encode }}"
+        response_variable: antwort
+      - variables:
+          ergebnis: >-
+            {{ antwort.stdout | from_json if (antwort.stdout | default('')).startswith('{')
+               else {'ok': false, 'text': 'Keine Antwort: ' ~ (antwort.stderr | default('?'))} }}
+      - action: persistent_notification.create
+        data:
+          notification_id: pm_wareneingang
+          title: "{{ 'Wareneingang gebucht' if ergebnis.ok else 'Wareneingang fehlgeschlagen' }}"
+          message: "{{ ergebnis.text }}"
+      - if:
+          - condition: template
+            value_template: "{{ ergebnis.ok }}"
+        then:
+          - action: script.pm_we_zuruecksetzen
+          - action: homeassistant.update_entity
+            target:
+              entity_id: sensor.pm_druckwarteschlange
+          - action: homeassistant.update_entity
+            target:
+              entity_id: [sensor.pm_kalkulationsdaten, sensor.pm_filament_lager]
+
+  pm_foto_auswerten:
+    alias: "PM Typenschild-Foto auswerten"
+    icon: mdi:text-recognition
+    description: "Liest das neueste Foto aus Medien → filament_fotos per KI aus und füllt die Wareneingangsfelder."
+    mode: single
+    sequence:
+      - action: shell_command.pm_neuestes_foto
+        response_variable: foto
+      - variables:
+          datei: "{{ (foto.stdout | default('')).strip() }}"
+      - if:
+          - condition: template
+            value_template: "{{ datei == '' }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: pm_wareneingang
+              title: "Kein Foto gefunden"
+              message: "Bitte zuerst ein Foto vom Typenschild hochladen (Medien → filament_fotos)."
+          - stop: "Kein Foto"
+      - action: ai_task.generate_data
+        data:
+          task_name: "Filament-Typenschild lesen"
+          entity_id: "{{ states('input_text.pm_ki_entity') }}"
+          instructions: >-
+            Auf dem Foto ist das Etikett/Typenschild einer 3D-Drucker-Filamentrolle. Lies exakt ab:
+            Hersteller (Marke), Material genau wie aufgedruckt (z. B. PLA, PLA+, PLA+ 2.0, PETG, PETG HS,
+            Silk PLA, ABS, ASA, TPU 95A – Zusätze wie 2.0, HS, Matte, Silk, CF NICHT weglassen),
+            Farbname wie aufgedruckt, Farbcode als Hex (#RRGGBB) passend zur Farbe der Rolle/des Etiketts,
+            Nettogewicht in Gramm (z. B. 1 kg = 1000) und die Ziffern des EAN-/Strichcodes.
+            Unbekanntes leer lassen bzw. 0. Nichts erfinden.
+          structure:
+            hersteller:
+              description: "Marke/Hersteller"
+              required: true
+              selector:
+                text:
+            material:
+              description: "Material inkl. Zusätzen wie aufgedruckt"
+              required: true
+              selector:
+                text:
+            farbe:
+              description: "Farbname wie aufgedruckt"
+              required: true
+              selector:
+                text:
+            farbcode:
+              description: "Hex-Farbcode #RRGGBB"
+              selector:
+                text:
+            gewicht_g:
+              description: "Nettogewicht in Gramm"
+              selector:
+                number:
+            barcode:
+              description: "EAN/Barcode-Ziffern"
+              selector:
+                text:
+          attachments:
+            - media_content_id: "media-source://media_source/local/filament_fotos/{{ datei }}"
+              media_content_type: "image/jpeg"
+        response_variable: ki
+      - variables:
+          d: "{{ ki.data if ki.data is mapping else {} }}"
+      - variables:
+          gew: "{{ d.gewicht_g | float(1000) }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_hersteller
+        data:
+          value: "{{ (d.hersteller | default(''))[:60] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_material
+        data:
+          value: "{{ (d.material | default(''))[:60] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_farbe
+        data:
+          value: "{{ (d.farbe | default(''))[:80] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_farbcode
+        data:
+          value: "{{ (d.farbcode | default(''))[:7] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_barcode
+        data:
+          value: "{{ ((d.barcode | default('')) | regex_replace('[^0-9]', ''))[:30] }}"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_we_rollengroesse
+        data:
+          option: "{{ {1000:'1 kg',3000:'3 kg',500:'0,5 kg',750:'0,75 kg',2000:'2 kg',5000:'5 kg'}.get(gew | int, '1 kg') }}"
+      - action: persistent_notification.create
+        data:
+          notification_id: pm_wareneingang
+          title: "Typenschild erkannt – bitte prüfen"
+          message: >-
+            {{ d.hersteller | default('?') }} {{ d.material | default('?') }} – {{ d.farbe | default('?') }}
+            {{ d.farbcode | default('') }}, {{ gew | int }} g, Barcode {{ d.barcode | default('–') }}.
+            Prüfen, Anzahl und Preis eintragen, dann „Einbuchen“.
+
+###############################################################################
+# 6. AUTOMATIONEN
+###############################################################################
+automation:
+  # ---------------- Druckkosten ----------------
+  - id: pm_druckkosten_start
+    alias: "PM Druckkosten – Druckstart"
+    description: "Setzt beim Start eines neuen Drucks die laufenden Kosten-Zähler und den Energiezähler zurück."
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["standby", "complete", "cancelled", "error"]
+        to: printing
+    actions:
+      - action: input_number.set_value
+        target:
+          entity_id:
+            - input_number.pm_stromkosten_laufender_druck
+            - input_number.pm_filament_laufender_druck
+            - input_number.pm_filamentkosten_laufender_druck
+        data:
+          value: 0
+      - action: utility_meter.reset
+        target:
+          entity_id: sensor.pm_energie_aktueller_druck
+        continue_on_error: true
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_ergebnis_letzter_druck
+        data:
+          option: "–"
+
+  - id: pm_druckkosten_ende
+    alias: "PM Druckkosten – Druckende"
+    description: "Bucht die Kosten des beendeten Drucks: complete = OK, cancelled/error = Fehldruck."
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["printing", "paused"]
+        to: complete
+        id: ok
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["printing", "paused"]
+        to: ["cancelled", "error"]
+        id: fehl
+    actions:
+      - variables:
+          datei: "{{ states('sensor.pm_dateiname') }}"
+          energie: "{{ states('sensor.pm_energie_aktueller_druck') }}"
+          gramm: "{{ states('sensor.pm_filament_aktueller_druck') }}"
+          kosten: >-
+            {{ (states('input_number.pm_stromkosten_laufender_druck') | float(0)
+              + states('input_number.pm_filamentkosten_laufender_druck') | float(0)) | round(2) }}
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_ergebnis_letzter_druck
+        data:
+          option: "–"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_kosten_letzter_druck
+        data:
+          value: "{{ kosten }}"
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: ok
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.pm_kosten_ok_drucke_gesamt
+                data:
+                  value: "{{ (states('input_number.pm_kosten_ok_drucke_gesamt') | float(0) + kosten) | round(2) }}"
+              - action: counter.increment
+                target:
+                  entity_id: counter.pm_anzahl_ok_drucke
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.pm_ergebnis_letzter_druck
+                data:
+                  option: "OK"
+          - conditions:
+              - condition: trigger
+                id: fehl
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.pm_kosten_fehldrucke_gesamt
+                data:
+                  value: "{{ (states('input_number.pm_kosten_fehldrucke_gesamt') | float(0) + kosten) | round(2) }}"
+              - action: counter.increment
+                target:
+                  entity_id: counter.pm_anzahl_fehldrucke
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.pm_ergebnis_letzter_druck
+                data:
+                  option: "Fehldruck"
+      - action: logbook.log
+        data:
+          name: "3D-Druck"
+          entity_id: input_select.pm_ergebnis_letzter_druck
+          message: "{{ 'OK' if trigger.id == 'ok' else 'Fehldruck' }}: {{ datei }} – {{ kosten }} € ({{ energie }} kWh, {{ gramm }} g)"
+
+  - id: pm_druckkosten_filament
+    alias: "PM Druckkosten – Filament aufsummieren"
+    description: "Rechnet jeden Filament-Zuwachs (Meter) mit Dichte und Preis der aktiven Spule in Gramm und Euro um."
+    mode: queued
+    max: 50
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_filament_verbraucht
+    conditions:
+      - condition: state
+        entity_id: sensor.pm_druckstatus
+        state: ["printing", "paused"]
+    actions:
+      - variables:
+          alt: "{{ trigger.from_state.state | float(0) }}"
+          neu: "{{ trigger.to_state.state | float(0) }}"
+      - variables:
+          delta_m: "{{ neu - alt if alt > 0 and neu > 0 else 0 }}"
+          dichte_spule: "{{ states('sensor.pm_aktive_spule_dichte') | float(0) }}"
+          preis_spule: "{{ states('sensor.pm_aktive_spule_preis_pro_kg') | float(0) }}"
+      - variables:
+          dichte: "{{ dichte_spule if dichte_spule > 0 else states('input_number.pm_filamentdichte') | float(1.24) }}"
+          preis: "{{ preis_spule if preis_spule > 0 else states('input_number.pm_filamentpreis') | float(0) }}"
+      - variables:
+          gramm: "{{ delta_m * 2.4053 * dichte }}"
+      - if:
+          - condition: template
+            value_template: "{{ 0 < delta_m < 20 }}"
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_filament_laufender_druck
+            data:
+              value: "{{ (states('input_number.pm_filament_laufender_druck') | float(0) + gramm) | round(2) }}"
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_filamentkosten_laufender_druck
+            data:
+              value: "{{ (states('input_number.pm_filamentkosten_laufender_druck') | float(0) + gramm / 1000 * preis) | round(4) }}"
+
+  - id: pm_druckkosten_strom
+    alias: "PM Druckkosten – Strom aufsummieren"
+    description: "Addiert jede Verbrauchsänderung (kWh) mal Strompreis dieses Moments."
+    mode: queued
+    max: 50
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_energie_drucker
+    conditions:
+      - condition: state
+        entity_id: sensor.pm_druckstatus
+        state: ["printing", "paused"]
+    actions:
+      - variables:
+          alt: "{{ trigger.from_state.state | float(0) }}"
+          neu: "{{ trigger.to_state.state | float(0) }}"
+      - variables:
+          delta: "{{ neu - alt if alt > 0 and neu > 0 else 0 }}"
+      - if:
+          - condition: template
+            value_template: "{{ 0 < delta < 1 }}"
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_stromkosten_laufender_druck
+            data:
+              value: "{{ (states('input_number.pm_stromkosten_laufender_druck') | float(0) + delta * states('sensor.pm_strompreis') | float(0)) | round(4) }}"
+
+  - id: pm_druckkosten_umbuchen
+    alias: "PM Druckkosten – Umbuchen OK/Fehldruck"
+    description: "Wird 'Ergebnis letzter Druck' zwischen OK und Fehldruck umgestellt, werden Kosten und Zähler umgebucht."
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: input_select.pm_ergebnis_letzter_druck
+        from: "OK"
+        to: "Fehldruck"
+        id: zu_fehl
+      - trigger: state
+        entity_id: input_select.pm_ergebnis_letzter_druck
+        from: "Fehldruck"
+        to: "OK"
+        id: zu_ok
+    actions:
+      - variables:
+          kosten: "{{ states('input_number.pm_kosten_letzter_druck') | float(0) }}"
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: zu_fehl
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.pm_kosten_ok_drucke_gesamt
+                data:
+                  value: "{{ [states('input_number.pm_kosten_ok_drucke_gesamt') | float(0) - kosten, 0] | max | round(2) }}"
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.pm_kosten_fehldrucke_gesamt
+                data:
+                  value: "{{ (states('input_number.pm_kosten_fehldrucke_gesamt') | float(0) + kosten) | round(2) }}"
+              - action: counter.decrement
+                target:
+                  entity_id: counter.pm_anzahl_ok_drucke
+              - action: counter.increment
+                target:
+                  entity_id: counter.pm_anzahl_fehldrucke
+          - conditions:
+              - condition: trigger
+                id: zu_ok
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.pm_kosten_fehldrucke_gesamt
+                data:
+                  value: "{{ [states('input_number.pm_kosten_fehldrucke_gesamt') | float(0) - kosten, 0] | max | round(2) }}"
+              - action: input_number.set_value
+                target:
+                  entity_id: input_number.pm_kosten_ok_drucke_gesamt
+                data:
+                  value: "{{ (states('input_number.pm_kosten_ok_drucke_gesamt') | float(0) + kosten) | round(2) }}"
+              - action: counter.decrement
+                target:
+                  entity_id: counter.pm_anzahl_fehldrucke
+              - action: counter.increment
+                target:
+                  entity_id: counter.pm_anzahl_ok_drucke
+
+  - id: pm_energie_lernen
+    alias: "PM Energie pro Druckstunde lernen"
+    description: "Lernt nach jedem erfolgreichen Druck (≥ 15 min) den Erfahrungswert kWh pro Druckstunde (70 % alt, 30 % neu)."
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["printing", "paused"]
+        to: complete
+    conditions:
+      - condition: numeric_state
+        entity_id: sensor.pm_druckdauer
+        above: 15
+      - condition: numeric_state
+        entity_id: sensor.pm_energie_aktueller_druck
+        above: 0
+    actions:
+      - variables:
+          neu: "{{ states('sensor.pm_energie_aktueller_druck') | float(0) / (states('sensor.pm_druckdauer') | float(0) / 60) }}"
+          alt: "{{ states('input_number.pm_energie_pro_druckstunde') | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_energie_pro_druckstunde
+        data:
+          value: "{{ ((alt * 0.7 + neu * 0.3) if alt > 0 else neu) | round(3) }}"
+      - action: logbook.log
+        data:
+          name: "3D-Druck Energie"
+          entity_id: input_number.pm_energie_pro_druckstunde
+          message: "Druck: {{ neu | round(3) }} kWh/h – neuer Erfahrungswert {{ ((alt * 0.7 + neu * 0.3) if alt > 0 else neu) | round(3) }} kWh/h"
+
+  # ---------------- Auswahllisten ----------------
+  - id: pm_listen_warteschlange
+    alias: "PM Auswahllisten Verwerfen/Zurückholen"
+    description: "Hält die Dropdowns zum Verwerfen und Zurückholen synchron mit der Druckwarteschlange."
+    mode: queued
+    max: 3
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_druckwarteschlange
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_druck_verwerfen_auswahl
+        data:
+          options: >-
+            {{ ['– bitte wählen –'] + ((state_attr('sensor.pm_druckwarteschlange','dateien') or [])
+               | rejectattr('status','eq','in_progress') | map(attribute='pfad') | list) }}
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_druck_zurueckholen_auswahl
+        data:
+          options: "{{ ['– bitte wählen –'] + (state_attr('sensor.pm_druckwarteschlange','verworfen') or []) }}"
+
+  - id: pm_listen_auftraege
+    alias: "PM Auswahllisten Aufträge/Wareneingang"
+    description: "Füllt die Dropdowns für Kalkulation (G-Code, Filament), Wareneingang (Vorlage) und Auftragsauswahl."
+    mode: queued
+    max: 3
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_kalkulationsdaten
+      - trigger: homeassistant
+        event: start
+    actions:
+      - variables:
+          fil: "{{ state_attr('sensor.pm_kalkulationsdaten','filamente') or [] }}"
+      - variables:
+          labels: "{{ fil | sort(attribute='hersteller,name') | map(attribute='label') | list }}"
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_kalk_datei
+        data:
+          options: "{{ ['manuell'] + ((state_attr('sensor.pm_kalkulationsdaten','gcodes') or []) | map(attribute='pfad') | list) }}"
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_kalk_filament
+        data:
+          options: "{{ ['– bitte wählen –'] + labels }}"
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_we_vorlage
+        data:
+          options: "{{ ['– neue Sorte / Foto –'] + labels }}"
+      - action: input_select.set_options
+        target:
+          entity_id: input_select.pm_auftrag_auswahl
+        data:
+          options: >-
+            {%- set ns = namespace(o=['– bitte wählen –']) -%}
+            {%- for a in (state_attr('sensor.pm_kalkulationsdaten','auftraege') or []) if a.status == 'geplant' -%}
+            {%- set ns.o = ns.o + [a.id ~ ' | ' ~ ('intern' if a.intern else (a.kunde or '?')) ~ ' – ' ~ (a.bezeichnung or a.datei or 'Auftrag')] -%}
+            {%- endfor -%}{{ ns.o }}
+
+  - id: pm_kalk_gcode_uebernehmen
+    alias: "PM Kalkulation – Werte aus G-Code übernehmen"
+    description: "Übernimmt Filamentgewicht und Druckzeit der gewählten G-Code-Datei in die Kalkulation."
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: input_select.pm_kalk_datei
+        not_to: ["manuell", "unavailable", "unknown"]
+    actions:
+      - variables:
+          g: >-
+            {{ (state_attr('sensor.pm_kalkulationsdaten','gcodes') or []) | selectattr('pfad','eq', trigger.to_state.state)
+               | list | first | default({}) }}
+      - condition: template
+        value_template: "{{ g.gewicht_g is defined }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_kalk_gewicht
+        data:
+          value: "{{ g.gewicht_g }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_kalk_druckzeit
+        data:
+          value: "{{ g.dauer_h }}"
+
+  - id: pm_we_vorlage_uebernehmen
+    alias: "PM Wareneingang – Vorlage übernehmen"
+    description: "Belegt die Wareneingangsfelder mit den Daten einer bekannten Filamentsorte vor."
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: input_select.pm_we_vorlage
+        not_to: ["– neue Sorte / Foto –", "unavailable", "unknown"]
+    actions:
+      - variables:
+          f: >-
+            {{ (state_attr('sensor.pm_kalkulationsdaten','filamente') or []) | selectattr('label','eq', trigger.to_state.state)
+               | list | first | default({}) }}
+      - condition: template
+        value_template: "{{ f.id is defined }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_hersteller
+        data:
+          value: "{{ f.hersteller }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_material
+        data:
+          value: "{{ f.material }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_farbe
+        data:
+          value: "{{ f.name[:80] }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_farbcode
+        data:
+          value: "{{ ('#' ~ f.hex) if f.hex else '' }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.pm_we_barcode
+        data:
+          value: "{{ f.ean[:30] }}"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.pm_we_rollengroesse
+        data:
+          option: >-
+            {% set w = f.rollengewicht | float(1000) %}{{ {1000:'1 kg',3000:'3 kg',500:'0,5 kg',750:'0,75 kg',2000:'2 kg',5000:'5 kg'}.get(w | int, '1 kg') }}
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_we_preis_pro_rolle
+        data:
+          value: "{{ ((f.preis_kg or 0) * (f.rollengewicht | float(1000)) / 1000) | round(2) }}"
+
+  # ---------------- Erstinstallation: sinnvolle Startwerte ----------------
+  - id: pm_startwerte
+    alias: "PM Startwerte setzen (nur bei leeren Feldern)"
+    description: "Belegt beim ersten Start leere Einstellungen mit Beispielwerten. Danach ohne Wirkung."
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:00:10"
+      - if:
+          - condition: state
+            entity_id: input_text.pm_ki_entity
+            state: ["", "unknown"]
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.pm_ki_entity
+            data:
+              value: "ai_task.openai_ai_task"
+      - if:
+          - condition: state
+            entity_id: input_text.pm_lagerorte
+            state: ["", "unknown"]
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.pm_lagerorte
+            data:
+              value: "Lager"
+      - if:
+          - condition: state
+            entity_id: input_text.pm_lager_wareneingang
+            state: ["", "unknown"]
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.pm_lager_wareneingang
+            data:
+              value: "Lager"
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_tage_warteschlange
+            below: 1.5
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_tage_warteschlange
+            data:
+              value: 5
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_energie_pro_druckstunde
+            below: 0.001
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_energie_pro_druckstunde
+            data:
+              value: 0.15
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_filamentdichte
+            below: 0.6
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_filamentdichte
+            data:
+              value: 1.24
