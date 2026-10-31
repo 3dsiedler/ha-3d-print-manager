@@ -4,6 +4,8 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.1.1-beta] – 2026-10-31
+
 ### Hinzugefügt
 - Mehrere Rollen pro Buchung können eigene Chargen haben: im Feld Charge durch Komma trennen, Rolle 1 bekommt die erste Charge usw. (eine einzelne Charge gilt für alle Rollen). Die Foto-Auswertung hängt bei Anzahl > 1 weitere Chargen automatisch an.
 - Foto-Auswertung ergänzt statt zu überschreiben: Karton-Foto (SKU, Barcode, Packungsgröße) und Rollen-Foto (Charge, Farbe, Gewicht) lassen sich nacheinander auswerten; leere Erkennungswerte löschen vorhandene Felder nicht mehr.
@@ -12,6 +14,8 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 - Wareneingang: Auswahl „Neue Sorte anlegen über“ – „In HA anlegen (wie bisher)“ oder „FilaManDB in FilaMan (Test)“. Im Testmodus legt HA nichts an, sondern zeigt die Anleitung, die Sorte in FilaMan per „Load from FilaManDB“ anzulegen; danach findet erneutes Einbuchen sie.
 
 ### Behoben
+- Foto-Auswertung: Fehler bei rein numerischem Barcode („int object is not subscriptable“); Material, Farbcode und Farbe werden nur noch übernommen, wenn sie auf dem Foto stehen (kein Raten mehr)
+- Händlerliste im Wareneingang wird nach einem Neuladen der YAML-Helfer automatisch wieder gefüllt
 - Dashboard: Markdown-Karten verloren Zeilenumbrüche (Lagerbestand: Typenliste in der Überschrift, zweiter Lagerort fehlte)
 - Leere Textfelder (Kalkulation, Wareneingang) zeigten „unknown“ – werden jetzt beim Start geleert
 

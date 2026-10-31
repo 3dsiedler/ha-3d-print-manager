@@ -2,7 +2,7 @@
 
 [🇩🇪 Deutsche Version](README.md)
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta-orange)
+![Version](https://img.shields.io/badge/version-0.1.1--beta-orange)
 ![Status](https://img.shields.io/badge/status-beta-yellow)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 

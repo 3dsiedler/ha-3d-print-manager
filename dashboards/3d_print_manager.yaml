@@ -1,4 +1,4 @@
-# 3D Print Manager – Dashboard (v0.1.0-beta)
+# 3D Print Manager – Dashboard (v0.1.1-beta)
 #
 # Import: Einstellungen → Dashboards → "Dashboard hinzufügen" → "Neues Dashboard
 # von Grund auf" → öffnen → ⋮ → "Dashboard bearbeiten" → ⋮ → "Raw-Konfigurationseditor"
@@ -580,7 +580,7 @@ views:
               - entity: input_select.pm_we_haendler
                 name: Händler (wird an der Spule vermerkt)
               - entity: input_text.pm_we_charge
-                name: Charge / Lot-Nr. vom Etikett (optional, mehrere Rollen: Komma)
+                name: "Charge / Lot-Nr. vom Etikett (optional, mehrere Rollen: Komma)"
               - entity: input_text.pm_we_bestellnr
                 name: Hersteller-Bestellnr. vom Etikett (optional)
 
