@@ -10,6 +10,16 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
 
 > ⚠️ **Beta:** Entwickelt und getestet mit einem **Sovol SV08** (Klipper, Moonraker, **FilaMan** über die Spoolman-kompatible API, OrcaSlicer). Das originale Spoolman nutzt dieselbe API und sollte genauso funktionieren, ist aber nicht separat getestet. Andere Moonraker-Drucker sollten funktionieren, sind aber nicht getestet. Rückmeldungen bitte als [Issue](../../issues). OctoPrint/Marlin ist geplant.
 
+## Screenshots
+
+| Drucker | Einstellungen mit Verbindungstest |
+|---|---|
+| <img src="docs/images/drucker.png" width="380" alt="Reiter Drucker"> | <img src="docs/images/einstellungen.png" width="480" alt="Reiter Einstellungen"> |
+| **Auftragskalkulation & Bestellliste** | **Wareneingang mit Foto-Upload** |
+| <img src="docs/images/auftraege.png" width="480" alt="Reiter Aufträge"> | <img src="docs/images/wareneingang.png" width="380" alt="Reiter Wareneingang"> |
+| **Lager** | |
+| <img src="docs/images/lager.png" width="480" alt="Reiter Lager"> | |
+
 ## Funktionen
 
 **Drucker**
@@ -20,6 +30,7 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
 - **Noch zu drucken:** alle G-Codes der letzten x Tage ohne erfolgreichen Druck, mit Vorschaubild
 - **Filamentprüfung je Datei** in Druckreihenfolge: reicht die aktive Spule? Sonst passende Spulen aus Druckerplätzen oder Lager vorschlagen – exaktes Material (PLA ≠ PLA+ ≠ PLA+ 2.0), Farbe (sofern im Slicer gesetzt), bei Rollenwechsel im Druck nur gleicher Hersteller
 - G-Codes **verwerfen / zurückholen** (Ordner `verworfen` auf dem Drucker, nichts wird gelöscht)
+- **Meldung bei Druckende** (fertig, Fehler, abgebrochen): Push aufs Handy und Alexa-Durchsage im einstellbaren Zeitfenster, Ziele im Reiter *Einstellungen*
 
 **Aufträge**
 - Kalkulation aus G-Code (Gewicht & Zeit automatisch) oder manuell
@@ -69,6 +80,7 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
    - Lagerorte (wie das Feld „Location“ in Spoolman/FilaMan, Komma-getrennt), z. B. `Regal,Keller`
    - Plätze am Drucker, z. B. `AMS-1,AMS-2,Halter:2` (`:2` = Platz für 2 Spulen)
    - Lagerort für Wareneingang, KI-Entität (z. B. `ai_task.openai_ai_task`)
+   - Meldung bei Druckende: `notify`-Entitäten der Handys mit Companion-App (z. B. `notify.pixel_10_pro_xl`; Antippen der Meldung öffnet das Dashboard) und der Alexa-Durchsagen (z. B. `notify.echo_wohnzimmer_sprechen`, benötigt die Alexa-Integration; „…_sprechen“ liest den Text direkt vor, „…_durchsagen“ braucht freigeschaltete Durchsagen in der Alexa-App und blieb im Test stumm), Zeitfenster für Durchsagen (Standard 8–22 Uhr)
    - Sätze im Reiter *Aufträge* (Maschine, Lohn, Konstruktion, Aufschlag, Mindestbestand)
 8. Der **Verbindungstest** im Reiter *Einstellungen* zeigt nach spätestens 5 Minuten, ob alles erreichbar ist.
 

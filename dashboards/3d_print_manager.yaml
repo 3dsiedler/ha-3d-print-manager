@@ -59,7 +59,7 @@ views:
             heading: Noch zu drucken
             icon: mdi:tray-full
           - type: markdown
-            content: >-
+            content: |-
               {%- set l = state_attr('sensor.pm_druckwarteschlange','dateien') or [] -%}
               {%- set tage = states('input_number.pm_tage_warteschlange') | int(5) -%}
               {%- set fehler = state_attr('sensor.pm_druckwarteschlange','fehler') -%}
@@ -68,9 +68,7 @@ views:
               {%- else -%}
               {%- set icons = {'offen':'⏳','in_progress':'🖨️','cancelled':'❌','error':'⚠️','klippy_shutdown':'⚠️','klippy_disconnect':'⚠️','interrupted':'⚠️','unterbrochen':'⚠️'} -%}
               {%- set namen = {'offen':'noch nicht gestartet','in_progress':'druckt gerade','cancelled':'abgebrochen','error':'Fehler','klippy_shutdown':'Fehler','klippy_disconnect':'Fehler','interrupted':'unterbrochen','unterbrochen':'unterbrochen'} -%}
-
               <small>Letzte {{ tage }} Tage · Aktive Spule: {{ state_attr('sensor.pm_druckwarteschlange','aktive_spule') }}</small>
-
               <table>
               {%- for f in l %}
               {%- set d = f.dauer_s | int(0) %}
@@ -80,7 +78,6 @@ views:
               </table>
               {%- set offen = l | rejectattr('status','eq','in_progress') | list %}
               {%- if offen %}
-
 
               **Noch offen:** {{ offen | length }} Datei(en) · {{ (offen | sum(attribute='dauer_s')) // 3600 }}h {{ '%02d' | format(((offen | sum(attribute='dauer_s')) % 3600) // 60) }}m · {{ (offen | sum(attribute='gewicht_g')) | round(0) | int }} g{% set w = state_attr('sensor.pm_druckwarteschlange','wechsel') | int(0) %}{% if w %} · 🧺 {{ w }}× Spule holen/wechseln{% else %} · 👍 kein Spulenwechsel nötig{% endif %}
               {%- endif %}
@@ -129,7 +126,7 @@ views:
             heading: Letzte Drucke
             icon: mdi:history
           - type: markdown
-            content: >-
+            content: |-
               {%- set icons = {'completed':'✅','cancelled':'❌','error':'⚠️','in_progress':'🖨️','klippy_shutdown':'⚠️','klippy_disconnect':'⚠️','interrupted':'⚠️'} -%}
               <table>
               {%- for j in (state_attr('sensor.pm_druckhistorie','jobs') or []) %}
@@ -318,7 +315,7 @@ views:
             heading: Ergebnis
             icon: mdi:cash-check
           - type: markdown
-            content: >-
+            content: |-
               {%- macro eur(x) -%}{{ ('%.2f' | format(x)) | replace('.', ',') }} €{%- endmacro -%}
               {%- set fil = (state_attr('sensor.pm_kalkulationsdaten','filamente') or []) | selectattr('label','eq', states('input_select.pm_kalk_filament')) | list | first | default(none) -%}
               {%- set n = states('input_number.pm_kalk_anzahl') | int(1) -%}
@@ -351,23 +348,16 @@ views:
               {{ n }}× · {{ g | round(1) }} g · {{ h | round(2) }} h Druckzeit{% if not intern and pct > 0 %} · Selbstkosten {{ eur(sk) }} + {{ pct | int }} %{% endif %}
               </ha-alert>
 
-
               | Kostenart | Grundlage | Betrag | Anteil |
-
               |---|---|--:|--:|
               {%- for p in pos %}
-
               | {{ p[0] }} | {{ p[1] }} | {{ eur(p[2]) }} | {{ (p[2] / sk * 100) | round(0) | int if sk > 0 else 0 }} % |
               {%- endfor %}
-
               | **Selbstkosten** | | **{{ eur(sk) }}** | |
               {%- if not intern %}
-
               | ➕ Aufschlag | {{ pct | int }} % | {{ eur(preis - sk) }} | |
-
               | **Angebot netto** | | **{{ eur(preis) }}** | |
               {%- endif %}
-
 
               {% if fil and not fil.preis_kg %}<ha-alert alert-type="info">Für diese Sorte ist in Spoolman kein Preis hinterlegt – es wird der Fallback von {{ eur(pkg) }}/kg verwendet.</ha-alert>
               {% endif %}
@@ -400,29 +390,24 @@ views:
             heading: Geplante Aufträge
             icon: mdi:clipboard-list-outline
           - type: markdown
-            content: >-
+            content: |-
               {%- set aa = state_attr('sensor.pm_kalkulationsdaten','auftraege') or [] -%}
               {%- set gp = aa | selectattr('status','eq','geplant') | sort(attribute='erstellt') | list -%}
               {%- if not gp %}Keine geplanten Aufträge.
               {%- else %}
               {%- for a in gp %}
-
               **{{ '🏠 Intern' if a.intern else '👤 ' ~ (a.kunde or '?') }} – {{ a.bezeichnung or a.datei or 'Auftrag' }}** <small>({{ a.erstellt | timestamp_custom('%d.%m.%Y') }})</small><br>
               {{ a.filament }} · {{ a.anzahl }}× · {{ a.gewicht_g_gesamt }} g · {{ a.druckzeit_h_gesamt }} h<br>
               {{ a.lager | default('…') }}<br>
               <small>Material {{ '%.2f' | format(a.kosten.material) }} · Strom {{ '%.2f' | format(a.kosten.strom) }} · Maschine {{ '%.2f' | format(a.kosten.maschine) }} · Rüsten {{ '%.2f' | format(a.kosten.ruesten) }} · Lohn {{ '%.2f' | format(a.kosten.lohn) }} · Konstruktion {{ '%.2f' | format(a.kosten.konstruktion) }} → Selbstkosten {{ '%.2f' | format(a.kosten.selbstkosten) }} €</small><br>
               💶 **{{ '%.2f' | format(a.kosten.preis) }} €**{{ ' (intern, ohne Aufschlag)' if a.intern }}
-
               {%- endfor %}
 
-
               ---
-
               **Summe geplant:** {{ gp | length }} Aufträge · {{ gp | sum(attribute='druckzeit_h_gesamt') | round(1) }} h Druckzeit · {{ gp | sum(attribute='gewicht_g_gesamt') | round(0) | int }} g · {{ '%.2f' | format(gp | map(attribute='kosten') | sum(attribute='preis')) }} €
               {%- endif %}
               {%- set er = aa | selectattr('status','eq','erledigt') | list %}
               {%- if er %}
-
 
               <small>Zuletzt erledigt: {% for a in er[:5] %}{{ ('Intern' if a.intern else a.kunde) ~ ' – ' ~ (a.bezeichnung or a.datei) }}{{ ', ' if not loop.last }}{% endfor %}</small>
               {%- endif %}
@@ -465,7 +450,7 @@ views:
             heading: Bestellliste
             icon: mdi:cart-outline
           - type: markdown
-            content: >-
+            content: |-
               {%- set fl = state_attr('sensor.pm_kalkulationsdaten','filamente') or [] -%}
               {%- set mind = states('input_number.pm_mindestbestand_je_sorte') | float(0) -%}
               {%- set ns = namespace(z=[], leer=[]) -%}
@@ -479,19 +464,15 @@ views:
               {%- endfor -%}
               {%- if not ns.z %}✅ Nichts zu bestellen – alle genutzten Sorten liegen über {{ mind | int }} g (nach laufenden Drucken und geplanten Aufträgen).
               {%- else %}
-
               | Sorte | frei | Grund | Bestellen | Vorschlag |
-
               |---|--:|---|---|---|
               {%- for f in ns.z %}
               {%- set fehlt = mind - f.frei_nach_auftraegen_g %}
               {%- set vs = ([f] + f.alternativen) | selectattr('preis_kg') | sort(attribute='preis_kg') | list %}
-
               | {{ f.hersteller }} {{ f.name }} ({{ f.material }}) | {{ f.frei_nach_auftraegen_g }} g | {{ '📋 Auftrag' if f.frei_nach_auftraegen_g < 0 else '📉 Mindestbestand' }} | **{{ (fehlt / f.rollengewicht) | round(0, 'ceil') | int }}× {{ (f.rollengewicht / 1000) | round(2) }} kg** | {% if vs %}{{ vs[0].label }} ({{ '%.2f' | format(vs[0].preis_kg) }} €/kg){% else %}–{% endif %} |
               {%- endfor %}
               {%- endif %}
               {%- if ns.leer %}
-
 
               <small>Aufgebraucht, ohne Bedarf (nicht auf der Liste): {{ ns.leer | join(', ') }}</small>
               {%- endif %}
@@ -596,7 +577,7 @@ views:
             heading: ③ Vorschau & Einbuchen
             icon: mdi:package-variant-closed-check
           - type: markdown
-            content: >-
+            content: |-
               {%- macro eur(x) -%}{{ ('%.2f' | format(x)) | replace('.', ',') }} €{%- endmacro -%}
               {%- macro norm(s) -%}{{ ((s or '') | lower | replace('+', ' plus ') | replace('plus', ' plus ') | regex_replace('[^a-z0-9.]+', ' ') | regex_replace(' +', ' ')) | trim }}{%- endmacro -%}
               {%- set leer = ['', 'unknown', 'unavailable'] -%}
@@ -657,13 +638,11 @@ views:
             heading: Warnungen
             icon: mdi:alert-circle-outline
           - type: markdown
-            content: >-
+            content: |-
               {% set w = state_attr('sensor.pm_filament_lager','warnungen') or [] -%}
               {% if w | length > 0 -%}
-
               ## ⚠️ Zu viele Spulen auf einem Platz
               {% for x in w %}
-
               - **{{ x }}**
               {%- endfor %}
               {% else -%}
@@ -671,27 +650,22 @@ views:
               {% endif %}
               {% set o = state_attr('sensor.pm_filament_lager','ohne_lagerort') | int(0) -%}
               {% if o > 0 %}
-
               ℹ️ {{ o }} Spulen haben in Spoolman noch keinen Lagerort.
               {% endif %}
-
               _Stand: {{ state_attr('sensor.pm_filament_lager','stand') }} · {{ state_attr('sensor.pm_filament_lager','gesamt_spulen') }} Spulen gesamt_
           - type: heading
             heading: Spulen an den Plätzen
             icon: mdi:printer-3d-nozzle
           - type: markdown
-            content: >-
+            content: |-
               {% set plaetze = state_attr('sensor.pm_filament_lager','plaetze') or [] -%}
               | Platz | Spule | Rest |
-
               |---|---|---|
               {%- for p in plaetze %}
               {%- if p.anzahl == 0 %}
-
               | {{ p.ort }} | _leer_ | |
               {%- else %}
               {%- for s in p.spulen %}
-
               | {{ p.ort }}{{ ' ⚠️' if p.warnung else '' }} | {{ s.name }} ({{ s.material }}) | {{ s.rest_g }} g |
               {%- endfor %}
               {%- endif %}
@@ -702,27 +676,21 @@ views:
             heading: Lagerbestand
             icon: mdi:warehouse
           - type: markdown
-            content: >-
+            content: |-
               {% set l = state_attr('sensor.pm_filament_lager','lager') or {} -%}
               {% for name in states('input_text.pm_lagerorte').split(',') | map('trim') | reject('eq', '') -%}
               {% set d = l[name] if name in l else none -%}
-
               ### {{ name }} – {{ d.spulen if d else 0 }} Spulen, {{ ((d.rest_g if d else 0) / 1000) | round(2) }} kg
               {% if d and d.gruppen | length > 0 %}
               {% for typ, items in d.gruppen | groupby('typ') -%}
-
               - **{{ typ }}**: {{ items | sum(attribute='spulen') }} Spulen, {{ items | sum(attribute='rest_g') }} g
               {% endfor %}
-
               | Typ | Farbe | Spulen | Rest |
-
               |---|---|---|---|
               {%- for g in d.gruppen %}
-
               | {{ g.typ }} | {{ g.farbe }} | {{ g.spulen }} | {{ g.rest_g }} g |
               {%- endfor %}
               {% else %}
-
               _keine Spulen_
               {% endif %}
               {% endfor %}
@@ -749,19 +717,15 @@ views:
               - entity: input_text.pm_ki_entity
                 name: KI für Fotoerkennung (z. B. ai_task.openai_ai_task)
           - type: markdown
-            content: >-
+            content: |-
               {%- set q = states('sensor.pm_druckwarteschlange') -%}
               {%- set fehler = state_attr('sensor.pm_druckwarteschlange','fehler') -%}
               {%- set spule = states('sensor.pm_aktive_spule_id') -%}
               {%- set ki = states('input_text.pm_ki_entity') -%}
               **Verbindungstest**
-
               {% if fehler %}❌ Moonraker/Spoolman: {{ fehler }}{% elif q in ['unknown','unavailable'] %}⏳ Moonraker/Spoolman: noch keine Daten (bis zu 5 min warten){% else %}✅ Moonraker & Spoolman erreichbar – {{ q }} Datei(en) in der Warteschlange{% endif %}
-
               {% if spule in ['unknown','unavailable'] %}⏳ Aktive Spule: noch unbekannt{% else %}✅ Aktive Spule laut Moonraker: #{{ spule }}{% endif %}
-
               {% if states(ki) in ['unknown','unavailable'] or not ki.startswith('ai_task.') %}⚠️ KI-Entität „{{ ki }}“ nicht gefunden – Fotoerkennung nicht verfügbar{% else %}✅ KI für Fotoerkennung: {{ state_attr(ki, 'friendly_name') or ki }}{% endif %}
-
               {% if states('sensor.pm_druckstatus') in ['unknown','unavailable'] %}❌ Druckeranbindung: sensor.pm_druckstatus liefert keine Daten – Abschnitt 1 im Package prüfen{% else %}✅ Druckeranbindung: Status „{{ states('sensor.pm_druckstatus') }}“{% endif %}
       - type: grid
         cards:
@@ -794,3 +758,21 @@ views:
                 name: Filamentpreis, wenn Spule ohne Preis
               - entity: input_number.pm_filamentdichte
                 name: Dichte, wenn Spule ohne Dichte
+          - type: heading
+            heading: Meldung bei Druckende
+            icon: mdi:bell-ring-outline
+            heading_style: subtitle
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_text.pm_meldung_handys
+                name: "Handys (z. B. notify.pixel_10_pro_xl – mehrere mit Komma)"
+              - entity: input_text.pm_meldung_alexa
+                name: "Alexa-Durchsagen (z. B. notify.echo_wohnzimmer_sprechen – mehrere mit Komma)"
+              - entity: input_number.pm_meldung_alexa_ab
+                name: "Alexa spricht ab"
+              - entity: input_number.pm_meldung_alexa_bis
+                name: "Alexa schweigt ab"
+          - type: markdown
+            content: |-
+              <small>Leer lassen = keine Meldung. Handys: Companion-App-Entitäten; Antippen der Meldung öffnet dieses Dashboard. Die Entitäten findest du unter *Einstellungen → Geräte & Dienste → Entitäten* (nach „notify“ filtern).</small>

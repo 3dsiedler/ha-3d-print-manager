@@ -177,6 +177,14 @@ input_text:
     name: "PM KI für Fotoerkennung (ai_task-Entität)"
     icon: mdi:robot-outline
     max: 100
+  pm_meldung_handys:
+    name: "PM Meldung Druckende: Handys (Companion-App notify-Entitäten, Komma-getrennt)"
+    icon: mdi:cellphone-message
+    max: 255
+  pm_meldung_alexa:
+    name: "PM Meldung Druckende: Alexa-Durchsagen (notify-Entitäten, Komma-getrennt)"
+    icon: mdi:account-voice
+    max: 255
   pm_kalk_kunde:
     name: "PM Kalk Kunde"
     icon: mdi:account
@@ -207,6 +215,22 @@ input_text:
     max: 30
 
 input_number:
+  pm_meldung_alexa_ab:
+    name: "PM Alexa-Durchsage ab (Uhr)"
+    icon: mdi:clock-start
+    min: 0
+    max: 24
+    step: 1
+    unit_of_measurement: "Uhr"
+    mode: box
+  pm_meldung_alexa_bis:
+    name: "PM Alexa-Durchsage bis (Uhr)"
+    icon: mdi:clock-end
+    min: 0
+    max: 24
+    step: 1
+    unit_of_measurement: "Uhr"
+    mode: box
   pm_tage_warteschlange:
     name: "PM Zeitraum Druckwarteschlange"
     icon: mdi:calendar-range
@@ -1792,6 +1816,93 @@ automation:
         data:
           value: "{{ ((f.preis_kg or 0) * (f.rollengewicht | float(1000)) / 1000) | round(2) }}"
 
+  # ---------------- Meldung bei Druckende (Handy / Alexa) ----------------
+  - id: pm_druckende_meldung
+    alias: "PM Druckende – Meldung (Handy & Alexa)"
+    description: >-
+      Meldet das Druckende auf die Handys (immer) und per Alexa-Durchsage
+      (nur im eingestellten Zeitfenster). Ziele: Reiter Einstellungen.
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["printing", "paused"]
+        to: complete
+        id: ok
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["printing", "paused"]
+        to: error
+        id: fehler
+      - trigger: state
+        entity_id: sensor.pm_druckstatus
+        from: ["printing", "paused"]
+        to: cancelled
+        id: abbruch
+    actions:
+      # Dateiname sofort merken – der Drucker leert ihn kurz nach Druckende
+      - variables:
+          datei: "{{ states('sensor.pm_dateiname') | replace('.gcode', '') }}"
+      # kurz warten, bis die Kostenbuchung (pm_druckkosten_ende) durch ist
+      - delay: "00:00:10"
+      - variables:
+          kosten: >-
+            {{ states('input_number.pm_kosten_letzter_druck') | float(0) | round(2)
+               | string | replace('.', ',') }}
+      - variables:
+          titel: >-
+            {{ {'ok': '✅ 3D-Druck fertig', 'fehler': '⚠️ 3D-Druck Fehler',
+                'abbruch': '❌ 3D-Druck abgebrochen'}[trigger.id] }}
+          text: "{{ datei ~ ' · ' if datei else '' }}Kosten {{ kosten }} €"
+          sprache: >-
+            {{ {'ok': 'Der 3D-Druck ist fertig.',
+                'fehler': 'Achtung, beim 3D-Druck ist ein Fehler aufgetreten.',
+                'abbruch': 'Der 3D-Druck wurde abgebrochen.'}[trigger.id] }}
+      - alias: "Handys"
+        if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: input_text.pm_meldung_handys
+                state: ["", "unknown", "unavailable"]
+        then:
+          # Companion-App-Dienst statt notify.send_message: nur so öffnet das
+          # Antippen der Meldung das 3D-Druck-Dashboard (clickAction).
+          # Eintrag z. B. "notify.pixel_10_pro_xl" -> notify.mobile_app_pixel_10_pro_xl
+          - repeat:
+              for_each: >-
+                {{ (states('input_text.pm_meldung_handys') | replace(' ', '')
+                   | replace('notify.', '') | replace('mobile_app_', '')).split(',')
+                   | reject('eq', '') | list }}
+              sequence:
+                - action: "notify.mobile_app_{{ repeat.item }}"
+                  continue_on_error: true
+                  data:
+                    title: "{{ titel }}"
+                    message: "{{ text }}"
+                    data:
+                      tag: pm_druckende
+                      url: /3d-print-manager/drucker
+                      clickAction: /3d-print-manager/drucker
+      - alias: "Alexa im Zeitfenster"
+        if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: input_text.pm_meldung_alexa
+                state: ["", "unknown", "unavailable"]
+          - condition: template
+            value_template: >-
+              {% set ab = states('input_number.pm_meldung_alexa_ab') | int(8) %}
+              {% set bis = states('input_number.pm_meldung_alexa_bis') | int(22) %}
+              {{ (ab <= now().hour < bis) if ab < bis else (now().hour >= ab or now().hour < bis) }}
+        then:
+          - action: notify.send_message
+            target:
+              entity_id: "{{ states('input_text.pm_meldung_alexa') | replace(' ', '') }}"
+            data:
+              message: "{{ sprache }}"
+
   # ---------------- Erstinstallation: sinnvolle Startwerte ----------------
   - id: pm_startwerte
     alias: "PM Startwerte setzen (nur bei leeren Feldern)"
@@ -1862,3 +1973,33 @@ automation:
               entity_id: input_number.pm_filamentdichte
             data:
               value: 1.24
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_meldung_alexa_ab
+            below: 0.5
+          - condition: numeric_state
+            entity_id: input_number.pm_meldung_alexa_bis
+            below: 0.5
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_meldung_alexa_ab
+            data:
+              value: 8
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_meldung_alexa_bis
+            data:
+              value: 22
+      # Textfelder ohne gespeicherten Wert stehen sonst als "unknown" im Dashboard
+      - repeat:
+          for_each: >-
+            {{ states.input_text | selectattr('entity_id', 'search', '^input_text\.pm_')
+               | selectattr('state', 'in', ['unknown', 'unavailable'])
+               | map(attribute='entity_id') | list }}
+          sequence:
+            - action: input_text.set_value
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                value: ""

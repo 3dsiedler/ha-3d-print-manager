@@ -12,6 +12,16 @@ Print management, filament inventory and job costing for **Klipper printers with
 >
 > The user interface (dashboard, notifications) is currently **German only**.
 
+## Screenshots
+
+| Printer | Settings with connection test |
+|---|---|
+| <img src="docs/images/drucker.png" width="380" alt="Printer tab"> | <img src="docs/images/einstellungen.png" width="480" alt="Settings tab"> |
+| **Job costing & reorder list** | **Goods receipt with photo upload** |
+| <img src="docs/images/auftraege.png" width="480" alt="Jobs tab"> | <img src="docs/images/wareneingang.png" width="380" alt="Goods receipt tab"> |
+| **Storage** | |
+| <img src="docs/images/lager.png" width="480" alt="Storage tab"> | |
+
 ## Features
 
 **Printer**
@@ -21,6 +31,7 @@ Print management, filament inventory and job costing for **Klipper printers with
 - Last 10 prints with thumbnail
 - **Print queue:** all G-codes of the last x days without a successful print, with thumbnail
 - **Filament check per file** in print order: is the active spool enough? Otherwise suggests matching spools from printer slots or storage – exact material (PLA ≠ PLA+ ≠ PLA+ 2.0), colour (if set in the slicer), same manufacturer when swapping spools mid-print
+- **Notification when a print ends** (done, error, cancelled): push to phones and Alexa announcement within a configurable time window, targets set in the *Einstellungen* tab
 - **Discard / restore** G-codes (moved to folder `verworfen` on the printer, nothing is deleted)
 
 **Jobs**
@@ -65,7 +76,7 @@ Print management, filament inventory and job costing for **Klipper printers with
 5. **Register the card:** *Settings → Dashboards → ⋮ → Resources → Add resource*
    URL `/local/print_manager/pm-foto-upload-card.js?v=0.1.0`, type *JavaScript module*.
 6. **Create the dashboard:** *Settings → Dashboards → Add dashboard → New dashboard from scratch* → open → ✏️ → ⋮ → *Raw configuration editor* → paste `dashboards/3d_print_manager.yaml` → save. Adjust the two camera entities or delete those cards.
-7. **Enter settings** (tab *Einstellungen*): Moonraker URL (`http://192.168.1.50:7125`), Spoolman API (`http://192.168.1.60:7912/api/v1`, or `http://192.168.1.60:8083/spoolman/api/v1` for FilaMan), storage locations (as in Spoolman "Location", comma separated), printer slots (`AMS-1,AMS-2,Holder:2` – `:2` = room for 2 spools), location for goods receipt, AI entity (`ai_task.openai_ai_task`). Rates are in the *Aufträge* tab.
+7. **Enter settings** (tab *Einstellungen*): Moonraker URL (`http://192.168.1.50:7125`), Spoolman API (`http://192.168.1.60:7912/api/v1`, or `http://192.168.1.60:8083/spoolman/api/v1` for FilaMan), storage locations (as in Spoolman "Location", comma separated), printer slots (`AMS-1,AMS-2,Holder:2` – `:2` = room for 2 spools), location for goods receipt, AI entity (`ai_task.openai_ai_task`), notification targets for print end (`notify` entities of your phones with the Companion app, e.g. `notify.my_phone` – tapping the notification opens the dashboard, and of Alexa announcements, e.g. `notify.echo_living_room_sprechen` – use the "Sprechen" (speak) entities; the "Durchsagen" (announce) ones stayed silent in testing; comma separated; Alexa window defaults to 8–22 h). Rates are in the *Aufträge* tab.
 8. The **connection test** in the *Einstellungen* tab shows within ~5 minutes whether everything is reachable.
 
 > 📷 Photos are stored in *Media → My media → filament_fotos*. Only **administrators** may upload media in Home Assistant.
