@@ -567,7 +567,7 @@ views:
     path: wareneingang
     icon: mdi:package-variant-plus
     type: sections
-    max_columns: 2
+    max_columns: 3
     sections:
       - type: grid
         cards:
@@ -588,32 +588,40 @@ views:
           - type: custom:pm-foto-upload-card
             grid_options:
               columns: 12
-              rows: 4
-          - type: button
+              rows: 3
+          - type: tile
+            entity: script.pm_foto_auswerten
             name: Letztes Foto erneut auswerten
             icon: mdi:text-recognition
-            show_state: false
+            vertical: false
+            hide_state: true
             tap_action:
+              action: perform-action
+              perform_action: script.pm_foto_auswerten
+            icon_tap_action:
               action: perform-action
               perform_action: script.pm_foto_auswerten
             grid_options:
               columns: 12
               rows: 1
           - type: entities
+            title: Vorschläge
             show_header_toggle: false
+            state_color: false
             entities:
               - entity: input_select.pm_we_vorschlag
-                name: Vorschlag (passende bekannte Sorten)
+                name: Bekannte Sorten (passend)
               - entity: input_select.pm_we_ofd_vorschlag
-                name: Vorschlag aus Open Filament Database (Material muss passen)
+                name: Open Filament Database (Material muss passen)
               - entity: input_select.pm_we_vorlage
-                name: Alle bekannten Sorten (Vorlage)
+                name: Alle bekannten Sorten
+      - type: grid
+        cards:
           - type: heading
-            heading: ② Prüfen & ergänzen
+            heading: ② Sorte prüfen & ergänzen
             heading_style: subtitle
             icon: mdi:clipboard-check-outline
           - type: entities
-            title: Sorte
             show_header_toggle: false
             entities:
               - entity: input_text.pm_we_hersteller
@@ -626,8 +634,14 @@ views:
                 name: Farbcode (#RRGGBB)
               - entity: input_text.pm_we_barcode
                 name: Barcode (EAN)
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: ③ Menge & Preis
+            heading_style: subtitle
+            icon: mdi:scale-balance
           - type: entities
-            title: Menge & Preis
             show_header_toggle: false
             entities:
               - entity: input_select.pm_we_rollengroesse
@@ -642,11 +656,9 @@ views:
                 name: "Charge / Lot-Nr. vom Etikett (optional, mehrere Rollen: Komma)"
               - entity: input_text.pm_we_bestellnr
                 name: Hersteller-Bestellnr. vom Etikett (optional)
-
-      - type: grid
-        cards:
           - type: heading
-            heading: ③ Vorschau & Einbuchen
+            heading: ④ Vorschau & Einbuchen
+            heading_style: subtitle
             icon: mdi:package-variant-closed-check
           - type: markdown
             content: |-
@@ -698,13 +710,6 @@ views:
               📦 Ziel: {{ ziel }}{% if haendler[0] != '–' and not haendler.startswith('anderer') %} · 🛒 {{ haendler }}{% endif %}{% if charge %} · Charge {{ charge }}{% endif %}{% if bestellnr %} · Best.-Nr. {{ bestellnr }}{% endif %}
               </ha-alert>
               {%- endif %}
-          - type: entities
-            show_header_toggle: false
-            entities:
-              - entity: input_select.pm_we_anlegen_modus
-                name: Neue Sorte anlegen über
-              - entity: input_boolean.pm_we_neu_ok
-                name: Neue Sorte / neuen Hersteller anlegen erlauben (nur Modus HA)
           - type: button
             name: Einbuchen
             icon: mdi:package-variant-plus
@@ -717,6 +722,13 @@ views:
             grid_options:
               columns: 12
               rows: 2
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_select.pm_we_anlegen_modus
+                name: Neue Sorte anlegen über
+              - entity: input_boolean.pm_we_neu_ok
+                name: Neue Sorte / neuen Hersteller anlegen erlauben (nur Modus HA)
 
   # ===========================================================================
   - title: Lager

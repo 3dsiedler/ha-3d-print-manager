@@ -5,6 +5,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Geändert
+- Reiter Wareneingang neu angeordnet: am PC dreispaltig (Erfassen & Vorschläge | Sorte & Menge/Preis | Vorschau & Einbuchen), auf kleineren Bildschirmen zwei bzw. eine Spalte. Foto-Karte und „Letztes Foto erneut auswerten“ kompakter, Vorschläge in einer Karte.
 - Foto-Upload-Karte: Drückst du im Wareneingang „Neu“ (oder wurde gebucht), verschwindet das angezeigte Typenschild-Foto und der Status wird zurückgesetzt.
 
 ### Hinzugefügt
