@@ -10,6 +10,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 - Sensor `sensor.pm_paket_update` zeigt an, ob auf GitHub eine neuere Paketdatei liegt (Kachel in den Einstellungen).
 
 ### Geändert
+- Ist im Slicer keine Filamentfarbe gesetzt, nimmt die Planung die Farbe der laufenden Spule an. Vorschläge für Spulenwechsel zeigen dann nur Spulen in gleicher Farbe.
 - Spulenwarnung nennt die Spulennummer der aktiven Spule und bis zu 3 passende Ersatzspulen im Lager mit Nummer (auch in der Sprachansage).
 
 ### Behoben

@@ -903,9 +903,14 @@ command_line:
             liste.append(e)
         reihe = [x for x in liste if x["status"] == "in_progress"] + sorted([x for x in liste if x["status"] != "in_progress"], key=lambda x: x["hochgeladen"])
         cur = aktiv
+        aktiv_hex = (aktiv or {}).get("hex") or ""
         wechsel = 0
         for job in reihe:
             z = []
+            # Farbe im Slicer nicht gesetzt: Farbe der laufenden Spule annehmen (Vorschläge nur in gleicher Farbe)
+            angenommen = bool(job["mat"] and not job["hex"] and aktiv_hex)
+            if angenommen:
+                job["hex"] = aktiv_hex
             bedarf = job["gewicht_g"] * (1 - fortschritt) if job["status"] == "in_progress" else job["gewicht_g"]
             job["bedarf_g"] = round(bedarf)
             job["aktion"] = False
@@ -966,7 +971,9 @@ command_line:
                     else:
                         z.append("❗ Keine passende Spule mit genug Filament vorhanden")
                         cur = None
-            if job["mat"] and not job["hex"]:
+            if angenommen:
+                z.append("🎨 Farbe im Slicer nicht gesetzt – Farbe der laufenden Spule angenommen (#" + aktiv_hex + ")")
+            elif job["mat"] and not job["hex"]:
                 z.append("🎨 Farbe im Slicer nicht gesetzt – nur Material/Hersteller geprüft")
             job["pruefung"] = z
             if job["aktion"]:

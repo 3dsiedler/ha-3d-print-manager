@@ -22,6 +22,39 @@ views:
     sections:
       - type: grid
         cards:
+          - type: markdown
+            content: |-
+              {%- set l = state_attr('sensor.pm_druckwarteschlange','dateien') or [] -%}
+              {%- set sid = states('sensor.pm_aktive_spule_id') -%}
+              {%- set rest = states('sensor.pm_aktive_spule_restgewicht') | float(0) -%}
+              {%- set proz = states('sensor.pm_aktive_spule_rest_prozent') | float(0) -%}
+              {%- set warn = states('input_number.pm_spule_warn1') | float(10) -%}
+              {%- set lauf = l | selectattr('status','eq','in_progress') | list | first | default(none) -%}
+              {%- set naechste = l | selectattr('aktion') | list | first | default(none) -%}
+              {%- set w = state_attr('sensor.pm_druckwarteschlange','wechsel') | int(0) -%}
+              {%- set ns = namespace(ort='') -%}
+              {%- for p in state_attr('sensor.pm_filament_lager','plaetze') or [] -%}
+              {%- for s in p.spulen if s.id | string == sid -%}{%- set ns.ort = p.ort -%}{%- endfor -%}
+              {%- endfor -%}
+              {%- set ende = states('sensor.pm_druckende') -%}
+              {%- set ende_txt = as_local(ende | as_datetime).strftime('%H:%M') if ende not in ['unknown','unavailable','none',''] and lauf else '' -%}
+              {%- set nach = (rest - lauf.bedarf_g) if lauf else rest -%}
+              {%- if sid in ['unknown','unavailable','none',''] -%}
+              <ha-alert alert-type="info" title="Spulenwechsel">Keine aktive Spule erkannt (Drucker aus oder Moonraker nicht erreichbar).</ha-alert>
+              {%- else -%}
+              {%- set stufe = 'error' if (lauf and lauf.bedarf_g > rest) else ('warning' if (naechste or proz < warn) else 'success') -%}
+              {%- set titel = '🛑 Spule reicht nicht für den laufenden Druck' if stufe == 'error' else ('🔁 Spulenwechsel nötig' ~ (' – bei Druckende ca. ' ~ ende_txt ~ ' Uhr' if ende_txt else '') if naechste else ('🧵 Spule wird knapp' if stufe == 'warning' else '✅ Kein Spulenwechsel nötig')) -%}
+              <ha-alert alert-type="{{ stufe }}" title="{{ titel }}">
+              <b>Aktive Spule Nr. {{ sid }}</b> {{ states('sensor.pm_aktive_spule_name') }}{% if ns.ort %} · Platz {{ ns.ort }}{% endif %}<br>
+              Rest: <b>{{ rest | round(0) | int }} g</b> ({{ proz | round(0) | int }} %)
+              {%- if lauf %}<br>Laufender Druck braucht noch <b>{{ lauf.bedarf_g }} g</b> → danach <b>{{ nach | round(0) | int }} g</b> übrig{% endif %}
+              {%- if naechste %}<br><br>Nächster Druck: <b>{{ naechste.datei }}</b> ({{ naechste.bedarf_g }} g nötig)<br>
+              {%- for z in naechste.pruefung if not z.startswith('🎨') and not z.startswith('✅') %}{{ '⭐ identisch · ' if (states('sensor.pm_aktive_spule_name') in z and '(#' in z) else '' }}{{ z }}<br>{% endfor %}
+              {%- elif lauf %}<br>Kein Folgedruck in der Warteschlange braucht einen Wechsel.
+              {%- elif proz < warn %}<br>Spule ist fast leer – Ersatz bereitlegen.
+              {%- endif %}
+              </ha-alert>
+              {%- endif %}
           - type: heading
             heading: Aktive Spule
             icon: mdi:spool
@@ -229,6 +262,39 @@ views:
               - entity: sensor.pm_schichten_gesamt
                 name: Schichten gesamt
           # ANPASSEN: Vorschaubild-Kamera der Moonraker-Integration
+          - type: markdown
+            visibility:
+              - condition: state
+                entity: sensor.pm_druckstatus
+                state: [printing, paused]
+            content: |-
+              {%- macro eur(x) -%}{{ ('%.2f' | format(x)) | replace('.', ',') }} €{%- endmacro -%}
+              {%- set j = (state_attr('sensor.pm_druckhistorie','jobs') or []) | selectattr('status','eq','in_progress') | list | first | default(none) -%}
+              {%- if not j or not j.metadata -%}
+              <small>Keine Auftragsdaten verfügbar.</small>
+              {%- else -%}
+              {%- set m = j.metadata -%}
+              {%- set g = m.filament_weight_total | float(0) -%}
+              {%- set meter = m.filament_total | float(0) / 1000 -%}
+              {%- set s = m.estimated_time | float(0) -%}
+              {%- set h = s / 3600 -%}
+              {%- set pkg = states('sensor.pm_aktive_spule_preis_pro_kg') | float(0) -%}
+              {%- set pkg = pkg if pkg > 0 else states('input_number.pm_filamentpreis') | float(0) -%}
+              {%- set fk = g / 1000 * pkg -%}
+              {%- set sk = h * states('input_number.pm_energie_pro_druckstunde') | float(0) * states('sensor.pm_strompreis') | float(0) -%}
+              {%- set start = j.start_time | float(0) -%}
+              {%- macro dauer(x) -%}{%- set d = x // 86400 -%}{{ (d | int ~ 'd ') if d > 0 }}{{ ((x % 86400) // 3600) | int }}h {{ '%02d' | format(((x % 3600) // 60) | int) }}m{%- endmacro -%}
+              **📋 Gesamtschätzung beim Start** <small>({{ m.slicer }} {{ m.slicer_version }} · {{ j.filename.split('/')[-1] | replace('.gcode','') }})</small>
+
+              | | |
+              |---|--:|
+              | Gesamtfilament | **{{ '%.2f' | format(meter) | replace('.', ',') }} m · {{ '%.2f' | format(g) | replace('.', ',') }} g** |
+              | Geschätzte Kosten | **{{ eur(fk + sk) }}** <small>(Filament {{ eur(fk) }} + Strom {{ eur(sk) }})</small> |
+              | Druckzeit | **{{ dauer(s) }}** |
+              | Start | {{ start | timestamp_custom('%d.%m. %H:%M') }} Uhr · fertig ca. {{ (start + s) | timestamp_custom('%H:%M') }} Uhr |
+              | Schichten | {{ m.layer_count }} à {{ m.layer_height }} mm · Höhe {{ m.object_height }} mm |
+              | Material | {{ m.filament_type }} · Düse {{ m.nozzle_diameter }} mm · {{ m.first_layer_extr_temp | int }} °C / Bett {{ m.first_layer_bed_temp | int }} °C |
+              {%- endif %}
           - type: picture-entity
             entity: camera.sovol_sv08_thumbnail
             name: Druckvorschau
