@@ -679,6 +679,45 @@ rest:
           - jobs
 
 command_line:
+  # Identische Ersatzspulen aus dem Lager (bis zu 4) für Anzeigen, z. B. openHASP-Display
+  - sensor:
+      name: "PM Ersatzspulen"
+      unique_id: pm_ersatzspulen
+      icon: mdi:spool
+      scan_interval: 120
+      command_timeout: 20
+      value_template: "{{ value_json.anzahl }}"
+      json_attributes:
+        - liste
+      command: |-
+        python3 -I -c '
+        import sys, json, urllib.request as u
+        API, aktiv, minp = sys.argv[1].rstrip("/"), sys.argv[2], float(sys.argv[3])
+        lager = [x.strip().lower() for x in sys.argv[4].split(",") if x.strip()]
+        def aus(l):
+            print(json.dumps({"anzahl": len(l), "liste": l})); raise SystemExit
+        try:
+            alle = json.load(u.urlopen(API + "/spool?limit=1000", timeout=15))
+        except Exception:
+            aus([])
+        def f(s):
+            return s.get("filament") or {}
+        def proz(s):
+            g = s.get("initial_weight") or f(s).get("weight") or 0
+            return (s.get("remaining_weight") or 0) / g * 100 if g else 0
+        def key(s):
+            x = f(s)
+            return ((x.get("vendor") or {}).get("name", "").lower(), (x.get("material") or "").lower(), (x.get("color_hex") or "").lower().lstrip("#"), (x.get("name") or "").strip().lower(), x.get("diameter"))
+        cur = next((s for s in alle if str(s.get("id")) == aktiv), None)
+        if not cur:
+            aus([])
+        kand = [s for s in alle if str(s.get("id")) != aktiv and not s.get("archived")
+                and (not lager or (s.get("location") or "").strip().lower() in lager)
+                and proz(s) >= minp and (f(s).get("id") == f(cur).get("id") or key(s) == key(cur))]
+        kand.sort(key=lambda s: s.get("remaining_weight") or 0)
+        aus([{"nr": s["id"], "name": f(s).get("name") or "", "rest_g": round(s.get("remaining_weight") or 0), "ort": s.get("location") or "?"} for s in kand[:4]])
+        ' "{{ states('input_text.pm_spoolman_api') }}" "{{ states('sensor.pm_aktive_spule_id') }}" "{{ states('input_number.pm_spule_ersatz_prozent') | float(30) }}" "{{ states('input_text.pm_lagerorte') }}"
+
   # Passt die bereitgelegte Spule zur aktiven Spule? (gleiche Sorte, Farbe, Material, Durchmesser)
   - sensor:
       name: "PM Bereitgelegte Spule Prüfung"
