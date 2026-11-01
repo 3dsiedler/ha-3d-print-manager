@@ -672,6 +672,26 @@ rest:
           - jobs
 
 command_line:
+  # Gibt es auf GitHub eine neuere Paketdatei? (Vergleich per Prüfsumme, stündlich)
+  - sensor:
+      name: "PM Paket Update"
+      unique_id: pm_paket_update
+      icon: mdi:cloud-sync-outline
+      scan_interval: 3600
+      command_timeout: 30
+      command: |-
+        python3 -I -c '
+        import hashlib, urllib.request as u
+        Z = "/config/packages/3d_print_manager.yaml"
+        URL = "https://raw.githubusercontent.com/3dsiedler/ha-3d-print-manager/main/packages/3d_print_manager.yaml"
+        try:
+            neu = u.urlopen(URL, timeout=20).read()
+            alt = open(Z, "rb").read()
+        except Exception:
+            print("unbekannt"); raise SystemExit
+        print("aktuell" if hashlib.sha256(neu).digest() == hashlib.sha256(alt).digest() else "Update verfügbar")
+        '
+
   # Lagerübersicht aus Spoolman (Plätze am Drucker + Lagerorte)
   - sensor:
       name: "PM Filament Lager"
