@@ -12,8 +12,9 @@
  *   skript:        script.pm_foto_auswerten        (wird nach dem Upload ausgeführt)
  *   vorbereitung:  shell_command.pm_neuestes_foto  (legt den Ordner an)
  *   max_pixel:     1600                            (längste Bildkante)
+ *   reset_skript:  script.pm_we_zuruecksetzen      ("Neu": Vorschau und Status leeren)
  */
-const PM_VERSION = "0.1.0-beta";
+const PM_VERSION = "0.1.1-beta";
 
 class PmFotoUploadCard extends HTMLElement {
   setConfig(config) {
@@ -22,11 +23,34 @@ class PmFotoUploadCard extends HTMLElement {
       skript: "script.pm_foto_auswerten",
       vorbereitung: "shell_command.pm_neuestes_foto",
       max_pixel: 1600,
+      reset_skript: "script.pm_we_zuruecksetzen",
     }, config || {});
     this._render();
   }
 
-  set hass(hass) { this._hass = hass; }
+  set hass(hass) {
+    this._hass = hass;
+    // "Neu" im Wareneingang (oder gebucht): Vorschaubild und Status leeren
+    const sk = hass.states && hass.states[this._c.reset_skript];
+    const lt = sk && sk.attributes ? sk.attributes.last_triggered : undefined;
+    if (this._lt === undefined) { this._lt = lt || null; return; }
+    if (lt && lt !== this._lt) {
+      this._lt = lt;
+      if (!this._busy) this._zuruecksetzen();
+    }
+  }
+
+  _zuruecksetzen() {
+    const r = this.shadowRoot;
+    if (!r) return;
+    const pv = r.getElementById("pv");
+    if (pv) {
+      if (pv.src && pv.src.startsWith("blob:")) URL.revokeObjectURL(pv.src);
+      pv.removeAttribute("src");
+      pv.hidden = true;
+    }
+    this._status("Nach dem Hochladen liest die KI Hersteller, Material, Farbe und Barcode aus.");
+  }
   getCardSize() { return 3; }
   getGridOptions() { return { columns: 12, rows: 3, min_rows: 3 }; }
 

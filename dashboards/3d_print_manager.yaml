@@ -604,6 +604,8 @@ views:
             entities:
               - entity: input_select.pm_we_vorschlag
                 name: Vorschlag (passende bekannte Sorten)
+              - entity: input_select.pm_we_ofd_vorschlag
+                name: Vorschlag aus Open Filament Database (Material muss passen)
               - entity: input_select.pm_we_vorlage
                 name: Alle bekannten Sorten (Vorlage)
           - type: heading
