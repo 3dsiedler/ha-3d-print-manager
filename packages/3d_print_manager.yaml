@@ -777,6 +777,7 @@ command_line:
         def hexnorm(h):
             h = (h or "").strip().strip('"').lstrip("#").upper()
             return h[:6] if re.fullmatch(r"[0-9A-F]{6}([0-9A-F]{2})?", h) else ""
+        DRUCKERWOERTER = {"generic", "sovol", "sv08", "sv07", "sv06", "creality", "bambu", "bambulab", "prusa", "voron", "ender", "k1", "k2"}
         def abstand(a, b):
             return sum((int(a[i:i + 2], 16) - int(b[i:i + 2], 16)) ** 2 for i in (0, 2, 4)) ** 0.5
         def thumb(pfad, meta):
@@ -870,7 +871,9 @@ command_line:
                 basis = g.get("filament_settings_id", "").split("@")[0].strip()
                 if hersteller and basis.lower().startswith(hersteller.lower()):
                     basis = basis[len(hersteller):].strip()
-                e["mat"] = norm(basis) or norm(g.get("filament_type") or m.get("filament_type"))
+                # Druckernamen im Slicer-Profil ("Generic Sovol SV08 PETG") gehören nicht zum Material
+                mat_roh = " ".join(w for w in norm(basis).split() if w not in DRUCKERWOERTER)
+                e["mat"] = mat_roh or norm(g.get("filament_type") or m.get("filament_type"))
                 e["material"] = (basis or g.get("filament_type") or m.get("filament_type") or "?")
                 e["slicer_hersteller"] = hersteller
                 h = hexnorm(g.get("filament_colour"))
@@ -1078,8 +1081,8 @@ shell_command:
             and (s["filament"]["id"] == cur["filament"]["id"] or key(s) == key(cur))]
     kand.sort(key=lambda s: s.get("remaining_weight") or 0)
     if kand:
-        s = kand[0]
-        print("Ersatz im Lager: #%s (%s), %d g = %d %%, Ort %s" % (s["id"], (s["filament"].get("name") or ""), round(s.get("remaining_weight") or 0), round(proz(s)), s.get("location") or "?"))
+        zeilen = ["Spule Nr. %s (%s): %d g = %d %%, Ort %s" % (s["id"], (s["filament"].get("name") or ""), round(s.get("remaining_weight") or 0), round(proz(s)), s.get("location") or "?") for s in kand[:3]]
+        print("Ersatz im Lager: " + " | ".join(zeilen))
     else:
         print("Keine gleiche Ersatzspule im Lager mit mind. %d %%" % round(minp))
     ' "{{ api }}" "{{ aktiv }}" "{{ minp }}" "{{ lager }}"
@@ -2657,7 +2660,7 @@ automation:
             above: input_number.pm_spule_warn2
     actions:
       - variables:
-          name: "{{ states('sensor.pm_aktive_spule_name') }}"
+          name: "Spule Nr. {{ states('sensor.pm_aktive_spule_id') }} {{ states('sensor.pm_aktive_spule_name') }}"
           prozent: "{{ states('sensor.pm_aktive_spule_rest_prozent') | float(0) | round(0) | int }}"
           gramm: "{{ states('sensor.pm_aktive_spule_restgewicht') | float(0) | round(0) | int }}"
       - action: shell_command.pm_spule_ersatz
@@ -2679,7 +2682,7 @@ automation:
             {{ {'w1': 'Achtung, die Filament Spule ' ~ name ~ ' hat nur noch ' ~ prozent ~ ' Prozent.',
                 'w2': 'Achtung, die Filament Spule ' ~ name ~ ' ist fast leer, nur noch ' ~ prozent ~ ' Prozent.',
                 'leer': 'Achtung, die Filament Spule ' ~ name ~ ' ist leer. Bitte Spule wechseln.'}[trigger.id]
-               ~ (' Eine gleiche Spule ist im Lager.' if ersatz.startswith('Ersatz')
+               ~ (' Eine gleiche Spule ist im Lager, Nummer ' ~ (ersatz | regex_findall('Nr\. (\d+)') | join(' oder ')) ~ '.' if ersatz.startswith('Ersatz')
                   else ' Im Lager ist keine gleiche Spule mit genug Rest.' if ersatz else '') }}
       - alias: "Handys"
         if:

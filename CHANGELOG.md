@@ -5,6 +5,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Geändert
+- Spulenwarnung nennt die Spulennummer der aktiven Spule und bis zu 3 passende Ersatzspulen im Lager mit Nummer (auch in der Sprachansage).
+
+### Behoben
+- Spulenprüfung: Druckernamen im Slicer-Profil (z. B. „Generic Sovol SV08 PETG“) werden beim Material ignoriert. Vorher erschien bei laufendem Druck fälschlich „Spulenwechsel nötig – keine passende Spule“, obwohl die aktive Spule gepasst hat.
+
+### Geändert
 - Reiter Wareneingang neu angeordnet: am PC dreispaltig (Erfassen & Vorschläge | Sorte & Menge/Preis | Vorschau & Einbuchen), auf kleineren Bildschirmen zwei bzw. eine Spalte. Foto-Karte und „Letztes Foto erneut auswerten“ kompakter, Vorschläge in einer Karte.
 - Foto-Upload-Karte: Drückst du im Wareneingang „Neu“ (oder wurde gebucht), verschwindet das angezeigte Typenschild-Foto und der Status wird zurückgesetzt.
 
