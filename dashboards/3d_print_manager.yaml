@@ -32,6 +32,8 @@ views:
               {%- set lauf = l | selectattr('status','eq','in_progress') | list | first | default(none) -%}
               {%- set naechste = l | selectattr('aktion') | list | first | default(none) -%}
               {%- set w = state_attr('sensor.pm_druckwarteschlange','wechsel') | int(0) -%}
+              {%- set runout = is_state('binary_sensor.sovol_sv08_filament_sensor','off') and states('sensor.pm_druckstatus') in ['printing','paused'] -%}
+              {%- set bereit = states('input_number.pm_wechsel_bereit_id') | int(0) -%}
               {%- set ns = namespace(ort='') -%}
               {%- for p in state_attr('sensor.pm_filament_lager','plaetze') or [] -%}
               {%- for s in p.spulen if s.id | string == sid -%}{%- set ns.ort = p.ort -%}{%- endfor -%}
@@ -42,11 +44,12 @@ views:
               {%- if sid in ['unknown','unavailable','none',''] -%}
               <ha-alert alert-type="info" title="Spulenwechsel">Keine aktive Spule erkannt (Drucker aus oder Moonraker nicht erreichbar).</ha-alert>
               {%- else -%}
-              {%- set stufe = 'error' if (lauf and lauf.bedarf_g > rest) else ('warning' if (naechste or proz < warn) else 'success') -%}
-              {%- set titel = '🛑 Spule reicht nicht für den laufenden Druck' if stufe == 'error' else ('🔁 Spulenwechsel nötig' ~ (' – bei Druckende ca. ' ~ ende_txt ~ ' Uhr' if ende_txt else '') if naechste else ('🧵 Spule wird knapp' if stufe == 'warning' else '✅ Kein Spulenwechsel nötig')) -%}
+              {%- set stufe = 'error' if (runout or (lauf and lauf.bedarf_g > rest)) else ('warning' if (naechste or proz < warn) else 'success') -%}
+              {%- set titel = '🛑 Filament fehlt – Runout-Sensor hat ausgelöst' if runout else '🛑 Spule reicht nicht für den laufenden Druck' if stufe == 'error' else ('🔁 Spulenwechsel nötig' ~ (' · Nr. ' ~ bereit ~ ' bereit' if bereit > 0 else '') ~ (' – bei Druckende ca. ' ~ ende_txt ~ ' Uhr' if ende_txt else '') if naechste else ('🧵 Spule wird knapp' if stufe == 'warning' else '✅ Kein Spulenwechsel nötig')) -%}
               <ha-alert alert-type="{{ stufe }}" title="{{ titel }}">
               <b>Aktive Spule Nr. {{ sid }}</b> {{ states('sensor.pm_aktive_spule_name') }}{% if ns.ort %} · Platz {{ ns.ort }}{% endif %}<br>
               Rest: <b>{{ rest | round(0) | int }} g</b> ({{ proz | round(0) | int }} %)
+              {%- if bereit > 0 %}<br>{% set bp = states('sensor.pm_bereitgelegte_spule_prufung') %}{% set bg = state_attr('sensor.pm_bereitgelegte_spule_prufung','grund') %}{% if bp == 'ok' %}✅ <b>Spule Nr. {{ bereit }} liegt bereit</b> – identisch ({{ state_attr('sensor.pm_bereitgelegte_spule_prufung','name') }}, {{ state_attr('sensor.pm_bereitgelegte_spule_prufung','rest_g') }} g){% elif bp == 'abweichend' %}⚠️ <b>Spule Nr. {{ bereit }} ist NICHT identisch</b> – {{ bg }}{% elif bp == 'aktiv' %}ℹ️ Spule Nr. {{ bereit }} ist schon die aktive Spule{% else %}❔ Spule Nr. {{ bereit }} liegt bereit (Prüfung: {{ bp }}{% if bg %} – {{ bg }}{% endif %}){% endif %}{% endif %}
               {%- if lauf %}<br>Laufender Druck braucht noch <b>{{ lauf.bedarf_g }} g</b> → danach <b>{{ nach | round(0) | int }} g</b> übrig{% endif %}
               {%- if naechste %}<br><br>Nächster Druck: <b>{{ naechste.datei }}</b> ({{ naechste.bedarf_g }} g nötig)<br>
               {%- for z in naechste.pruefung if not z.startswith('🎨') and not z.startswith('✅') %}{{ '⭐ identisch · ' if (states('sensor.pm_aktive_spule_name') in z and '(#' in z) else '' }}{{ z }}<br>{% endfor %}
@@ -55,6 +58,13 @@ views:
               {%- endif %}
               </ha-alert>
               {%- endif %}
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_number.pm_wechsel_bereit_id
+                name: "Spule zum Wechsel bereitgelegt (Nr.)"
+              - entity: script.pm_wechsel_bereit_aufheben
+                name: "Bereit-Markierung zurücknehmen"
           - type: heading
             heading: Aktive Spule
             icon: mdi:spool

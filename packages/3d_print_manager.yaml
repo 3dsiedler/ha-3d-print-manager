@@ -293,6 +293,13 @@ input_number:
     step: 1
     unit_of_measurement: "%"
     mode: box
+  pm_wechsel_bereit_id:
+    name: "PM Spule zum Wechsel bereit (Spulen-Nr., 0 = keine)"
+    icon: mdi:spool
+    min: 0
+    max: 9999
+    step: 1
+    mode: box
   pm_spule_ersatz_prozent:
     name: "PM Ersatzspule im Lager: mindestens (%)"
     icon: mdi:spool
@@ -672,6 +679,65 @@ rest:
           - jobs
 
 command_line:
+  # Passt die bereitgelegte Spule zur aktiven Spule? (gleiche Sorte, Farbe, Material, Durchmesser)
+  - sensor:
+      name: "PM Bereitgelegte Spule Prüfung"
+      unique_id: pm_bereit_pruefung
+      icon: mdi:spool
+      scan_interval: 120
+      command_timeout: 20
+      value_template: "{{ value_json.status }}"
+      json_attributes:
+        - nr
+        - name
+        - rest_g
+        - rest_prozent
+        - grund
+      command: |-
+        python3 -I -c '
+        import sys, json, urllib.request as u
+        API, aktiv, bereit = sys.argv[1].rstrip("/"), sys.argv[2], sys.argv[3]
+        def aus(**k):
+            print(json.dumps(k)); raise SystemExit
+        try:
+            b = int(float(bereit))
+        except Exception:
+            b = 0
+        if b <= 0:
+            aus(status="keine", nr=0, name="", rest_g=0, rest_prozent=0, grund="")
+        try:
+            alle = json.load(u.urlopen(API + "/spool?limit=1000", timeout=15))
+        except Exception:
+            aus(status="unbekannt", nr=b, name="", rest_g=0, rest_prozent=0, grund="Spoolman nicht erreichbar")
+        def f(s):
+            return s.get("filament") or {}
+        def key(s):
+            x = f(s)
+            return ((x.get("vendor") or {}).get("name", "").lower(), (x.get("material") or "").lower(), (x.get("color_hex") or "").lower().lstrip("#"), (x.get("name") or "").strip().lower(), x.get("diameter"))
+        sp = next((s for s in alle if s.get("id") == b), None)
+        if not sp:
+            aus(status="unbekannt", nr=b, name="", rest_g=0, rest_prozent=0, grund="Spule Nr. %d nicht in Spoolman" % b)
+        gew = sp.get("initial_weight") or f(sp).get("weight") or 0
+        rest = sp.get("remaining_weight") or 0
+        proz = round(rest / gew * 100) if gew else 0
+        name = f(sp).get("name") or ""
+        cur = next((s for s in alle if str(s.get("id")) == aktiv), None)
+        if str(b) == aktiv:
+            aus(status="aktiv", nr=b, name=name, rest_g=round(rest), rest_prozent=proz, grund="ist schon die aktive Spule")
+        if sp.get("archived"):
+            aus(status="abweichend", nr=b, name=name, rest_g=round(rest), rest_prozent=proz, grund="ist in Spoolman archiviert")
+        if not cur:
+            aus(status="unbekannt", nr=b, name=name, rest_g=round(rest), rest_prozent=proz, grund="keine aktive Spule zum Vergleich")
+        if f(sp).get("id") == f(cur).get("id") or key(sp) == key(cur):
+            aus(status="ok", nr=b, name=name, rest_g=round(rest), rest_prozent=proz, grund="")
+        gruende = []
+        kb, kc = key(sp), key(cur)
+        for i, n in enumerate(("Hersteller", "Material", "Farbe", "Name", "Durchmesser")):
+            if kb[i] != kc[i]:
+                gruende.append("%s: %s statt %s" % (n, kb[i] or "-", kc[i] or "-"))
+        aus(status="abweichend", nr=b, name=name, rest_g=round(rest), rest_prozent=proz, grund=", ".join(gruende))
+        ' "{{ states('input_text.pm_spoolman_api') }}" "{{ states('sensor.pm_aktive_spule_id') }}" "{{ states('input_number.pm_wechsel_bereit_id') }}"
+
   # Gibt es auf GitHub eine neuere Paketdatei? (Vergleich per Prüfsumme, stündlich)
   - sensor:
       name: "PM Paket Update"
@@ -1480,6 +1546,18 @@ shell_command:
 # 5. SKRIPTE
 ###############################################################################
 script:
+  pm_wechsel_bereit_aufheben:
+    alias: "PM Bereitgelegte Spule zurücknehmen"
+    icon: mdi:spool-off
+    description: "Setzt die bereitgelegte Wechselspule zurück (keine Spule bereit)."
+    mode: single
+    sequence:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_wechsel_bereit_id
+        data:
+          value: 0
+
   pm_druck_verwerfen:
     alias: "PM Druck verwerfen"
     icon: mdi:file-cancel-outline
@@ -2797,6 +2875,7 @@ automation:
           name: "Spule Nr. {{ states('sensor.pm_aktive_spule_id') }} {{ states('sensor.pm_aktive_spule_name') }}"
           prozent: "{{ states('sensor.pm_aktive_spule_rest_prozent') | float(0) | round(0) | int }}"
           gramm: "{{ states('sensor.pm_aktive_spule_restgewicht') | float(0) | round(0) | int }}"
+          bereit: "{{ states('input_number.pm_wechsel_bereit_id') | int(0) }}"
       - action: shell_command.pm_spule_ersatz
         data:
           api: "{{ states('input_text.pm_spoolman_api') }}"
@@ -2811,12 +2890,13 @@ automation:
           titel: >-
             {{ {'w1': '🧵 Spule wird knapp', 'w2': '⚠️ Spule fast leer',
                 'leer': '🛑 Spule leer'}[trigger.id] }}
-          text: "{{ name }} · noch {{ prozent }} % ({{ gramm }} g){{ '\n' ~ ersatz if ersatz else '' }}"
+          text: "{{ name }} · noch {{ prozent }} % ({{ gramm }} g){{ ('\n' ~ ('⚠️ Spule Nr. ' ~ bereit ~ ' liegt bereit, ist aber NICHT identisch' if is_state('sensor.pm_bereitgelegte_spule_prufung','abweichend') else '✅ Spule Nr. ' ~ bereit ~ ' liegt bereit')) if bereit | int(0) > 0 else ('\n' ~ ersatz if ersatz else '') }}"
           sprache: >-
             {{ {'w1': 'Achtung, die Filament Spule ' ~ name ~ ' hat nur noch ' ~ prozent ~ ' Prozent.',
                 'w2': 'Achtung, die Filament Spule ' ~ name ~ ' ist fast leer, nur noch ' ~ prozent ~ ' Prozent.',
                 'leer': 'Achtung, die Filament Spule ' ~ name ~ ' ist leer. Bitte Spule wechseln.'}[trigger.id]
-               ~ (' Eine gleiche Spule ist im Lager, Nummer ' ~ (ersatz | regex_findall('Nr\. (\d+)') | join(' oder ')) ~ '.' if ersatz.startswith('Ersatz')
+               ~ ((' Spule Nummer ' ~ bereit ~ ' liegt bereit.' ~ (' Achtung, sie ist nicht identisch.' if is_state('sensor.pm_bereitgelegte_spule_prufung','abweichend') else '')) if bereit | int(0) > 0
+                  else ' Eine gleiche Spule ist im Lager, Nummer ' ~ (ersatz | regex_findall('Nr\. (\d+)') | join(' oder ')) ~ '.' if ersatz.startswith('Ersatz')
                   else ' Im Lager ist keine gleiche Spule mit genug Rest.' if ersatz else '') }}
       - alias: "Handys"
         if:
@@ -2859,6 +2939,122 @@ automation:
               entity_id: "{{ states('input_text.pm_meldung_alexa') | replace(' ', '') }}"
             data:
               message: "{{ sprache }}"
+
+  - id: pm_runout
+    alias: "PM Runout – Filament fehlt im Druck (Handy & Alexa)"
+    description: >-
+      Der Filamentsensor am Drucker (aus = Spule leer) meldet mitten im Druck "fehlt".
+      Meldung mit Spulennummer und gleichen Ersatzspulen aus dem Lager auf Handy und Alexa
+      (Alexa im eingestellten Zeitfenster). Ziele wie beim Druckende.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.sovol_sv08_filament_sensor
+        to: "off"
+        for: "00:00:15"
+    conditions:
+      - condition: state
+        entity_id: sensor.pm_druckstatus
+        state: ["printing", "paused"]
+    actions:
+      - variables:
+          name: "Spule Nr. {{ states('sensor.pm_aktive_spule_id') }} {{ states('sensor.pm_aktive_spule_name') }}"
+          datei: "{{ states('sensor.pm_dateiname') | replace('.gcode', '') }}"
+          fortschritt: "{{ states('sensor.pm_fortschritt') | float(0) | round(0) | int }}"
+          bereit: "{{ states('input_number.pm_wechsel_bereit_id') | int(0) }}"
+      - action: shell_command.pm_spule_ersatz
+        data:
+          api: "{{ states('input_text.pm_spoolman_api') }}"
+          aktiv: "{{ states('sensor.pm_aktive_spule_id') }}"
+          minp: "{{ states('input_number.pm_spule_ersatz_prozent') | float(30) }}"
+          lager: "{{ states('input_text.pm_lagerorte') }}"
+        response_variable: ersatz_roh
+        continue_on_error: true
+      - variables:
+          ersatz: "{{ (ersatz_roh.stdout | default('') | trim) if ersatz_roh is defined and ersatz_roh is mapping else '' }}"
+      - variables:
+          titel: "🛑 Filament fehlt – Druck pausiert?"
+          text: "{{ name }} ist leer (Runout-Sensor) bei {{ fortschritt }} %.\n{{ datei }}{{ ('\n' ~ ('⚠️ Spule Nr. ' ~ bereit ~ ' liegt bereit, ist aber NICHT identisch' if is_state('sensor.pm_bereitgelegte_spule_prufung','abweichend') else '✅ Spule Nr. ' ~ bereit ~ ' liegt bereit')) if bereit | int(0) > 0 else ('\n' ~ ersatz if ersatz else '') }}"
+          sprache: >-
+            Achtung, am Drucker fehlt das Filament. {{ name }} ist leer. Bitte Spule wechseln.
+            {{ (' Spule Nummer ' ~ bereit ~ ' liegt bereit.' ~ (' Achtung, sie ist nicht identisch.' if is_state('sensor.pm_bereitgelegte_spule_prufung','abweichend') else '')) if bereit | int(0) > 0
+               else ' Eine gleiche Spule ist im Lager, Nummer ' ~ (ersatz | regex_findall('Nr\. (\d+)') | join(' oder ')) ~ '.' if ersatz.startswith('Ersatz')
+               else ' Im Lager ist keine gleiche Spule mit genug Rest.' if ersatz else '' }}
+      - alias: "Handys"
+        if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: input_text.pm_meldung_handys
+                state: ["", "unknown", "unavailable"]
+        then:
+          - repeat:
+              for_each: >-
+                {{ (states('input_text.pm_meldung_handys') | replace(' ', '')
+                   | replace('notify.', '') | replace('mobile_app_', '')).split(',')
+                   | reject('eq', '') | list }}
+              sequence:
+                - action: "notify.mobile_app_{{ repeat.item }}"
+                  continue_on_error: true
+                  data:
+                    title: "{{ titel }}"
+                    message: "{{ text }}"
+                    data:
+                      tag: pm_runout
+                      url: /3d-print-manager/drucker
+                      clickAction: /3d-print-manager/drucker
+      - alias: "Alexa im Zeitfenster"
+        if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: input_text.pm_meldung_alexa
+                state: ["", "unknown", "unavailable"]
+          - condition: template
+            value_template: >-
+              {% set ab = states('input_number.pm_meldung_alexa_ab') | int(8) %}
+              {% set bis = states('input_number.pm_meldung_alexa_bis') | int(22) %}
+              {{ (ab <= now().hour < bis) if ab < bis else (now().hour >= ab or now().hour < bis) }}
+        then:
+          - action: notify.send_message
+            target:
+              entity_id: "{{ states('input_text.pm_meldung_alexa') | replace(' ', '') }}"
+            data:
+              message: "{{ sprache }}"
+
+  - id: pm_wechsel_bereit_pruefen
+    alias: "PM Bereitgelegte Spule sofort prüfen"
+    description: "Aktualisiert die Prüfung, sobald die Nummer oder die aktive Spule wechselt."
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id:
+          - input_number.pm_wechsel_bereit_id
+          - sensor.pm_aktive_spule_id
+    actions:
+      - delay: "00:00:02"
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.pm_bereitgelegte_spule_prufung
+
+  - id: pm_wechsel_bereit_abschluss
+    alias: "PM Spulenwechsel erledigt – Bereit-Markierung löschen"
+    description: "Sobald die bereitgelegte Spule im Drucker als aktive Spule erkannt wird, wird die Markierung zurückgesetzt."
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.pm_aktive_spule_id
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ states('input_number.pm_wechsel_bereit_id') | int(0) > 0
+             and states('sensor.pm_aktive_spule_id') | int(-1) == states('input_number.pm_wechsel_bereit_id') | int(0) }}
+    actions:
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.pm_wechsel_bereit_id
+        data:
+          value: 0
 
   # ---------------- Erstinstallation: sinnvolle Startwerte ----------------
   - id: pm_startwerte

@@ -9,6 +9,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 - Sensor `sensor.pm_paket_update` zeigt an, ob auf GitHub eine neuere Paketdatei liegt (Kachel in den Einstellungen).
 
+- Runout: `PM Runout`-Automation meldet auf Handy und Alexa, wenn der Filamentsensor mitten im Druck auf "aus" (Spule leer) geht, mit Spulennummer und gleichen Ersatzspulen; die Wechselkarte im Dashboard wird dann rot.
+
+- Wechsel-Standby: Feld `pm_wechsel_bereit_id` (Nr. der bereitgelegten Spule). Die Wechselkarte zeigt sie als bereit, Spulenwarnung und Runout nennen sie statt der Lagerliste, nach dem Tausch wird die Markierung automatisch gelöscht.
+
+- Bereitgelegte Spule wird gegen die aktive Spule geprüft (`sensor.pm_bereitgelegte_spule_prufung`): Warnung in Karte und Meldungen, wenn Sorte, Farbe oder Material abweichen.
+
 ### Geändert
 - Ist im Slicer keine Filamentfarbe gesetzt, nimmt die Planung die Farbe der laufenden Spule an. Vorschläge für Spulenwechsel zeigen dann nur Spulen in gleicher Farbe.
 - Spulenwarnung nennt die Spulennummer der aktiven Spule und bis zu 3 passende Ersatzspulen im Lager mit Nummer (auch in der Sprachansage).
