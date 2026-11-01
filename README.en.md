@@ -2,7 +2,7 @@
 
 [🇩🇪 Deutsche Version](README.md)
 
-![Version](https://img.shields.io/badge/version-0.1.1--beta-orange)
+![Version](https://img.shields.io/badge/version-0.1.2--beta-orange)
 ![Status](https://img.shields.io/badge/status-beta-yellow)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
@@ -76,7 +76,7 @@ Print management, filament inventory and job costing for **Klipper printers with
 3. **Adapt the printer binding:** in `3d_print_manager.yaml`, section **1. DRUCKERANBINDUNG**, replace the prefix `sovol_sv08` with the prefix of your Moonraker entities (e.g. `sensor.my_printer_progress` → `my_printer`). Optionally add your energy meter and electricity price sensor.
 4. **Restart Home Assistant**.
 5. **Register the card:** *Settings → Dashboards → ⋮ → Resources → Add resource*
-   URL `/local/print_manager/pm-foto-upload-card.js?v=0.1.0`, type *JavaScript module*.
+   URL `/local/print_manager/pm-foto-upload-card.js?v=0.1.1`, type *JavaScript module*.
 6. **Create the dashboard:** *Settings → Dashboards → Add dashboard → New dashboard from scratch* → open → ✏️ → ⋮ → *Raw configuration editor* → paste `dashboards/3d_print_manager.yaml` → save. Adjust the two camera entities or delete those cards.
 7. **Enter settings** (tab *Einstellungen*): Moonraker URL (`http://192.168.1.50:7125`), Spoolman API (`http://192.168.1.60:7912/api/v1`, or `http://192.168.1.60:8083/spoolman/api/v1` for FilaMan), preferred retailers (comma separated, default Amazon,Polymaker,Sunlu), storage locations (as in Spoolman "Location", comma separated), printer slots (`AMS-1,AMS-2,Holder:2` – `:2` = room for 2 spools), location for goods receipt, AI entity (`ai_task.openai_ai_task`), notification targets for print end (`notify` entities of your phones with the Companion app, e.g. `notify.my_phone` – tapping the notification opens the dashboard, and of Alexa announcements, e.g. `notify.echo_living_room_sprechen` – use the "Sprechen" (speak) entities; the "Durchsagen" (announce) ones stayed silent in testing; comma separated; Alexa window defaults to 8–22 h). Rates are in the *Aufträge* tab.
 8. The **connection test** in the *Einstellungen* tab shows within ~5 minutes whether everything is reachable.
@@ -86,6 +86,12 @@ Print management, filament inventory and job costing for **Klipper printers with
 ## Updating
 
 Replace `3d_print_manager.yaml` (keep **your section 1**), copy the new card and bump `?v=…` in the resource URL, re-paste the dashboard if needed, restart. Settings, counters and jobs (`/config/print_manager/`) are kept. See [CHANGELOG.md](CHANGELOG.md).
+
+### Update with one button (from 0.1.2-beta)
+
+The **"Paket von GitHub aktualisieren"** button in the *Einstellungen* tab downloads the current `3d_print_manager.yaml` from this repository, checks the configuration and reloads it. If the check fails, the previous file is restored automatically. The last three versions are kept next to the file as `3d_print_manager.yaml.old1` to `.old3`. The *Paketversion* tile and the connection test show whether a newer version is on GitHub.
+
+> ⚠️ The button **replaces the whole package file**. If you changed the printer prefix in section 1 (printer connection), enter it again afterwards (or use `.old1` as a template). Changes to `command_line` or `rest` sensors only take effect after a restart. GitHub may serve new files up to 5 minutes late. The dashboard and the card JS are not updated automatically.
 
 ## Known limitations (beta)
 

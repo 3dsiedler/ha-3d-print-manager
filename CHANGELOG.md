@@ -4,33 +4,27 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.1.2-beta] – 2026-11-01
+
 ### Hinzugefügt
-- Update-Knopf: `script.pm_aktualisieren` lädt die Paketdatei von GitHub, prüft die Konfiguration, lädt neu und nimmt bei Fehlern automatisch zurück (die letzten 3 Versionen bleiben als `.old1` bis `.old3` erhalten).
-
-- Sensor `sensor.pm_paket_update` zeigt an, ob auf GitHub eine neuere Paketdatei liegt (Kachel in den Einstellungen).
-
-- Runout: `PM Runout`-Automation meldet auf Handy und Alexa, wenn der Filamentsensor mitten im Druck auf "aus" (Spule leer) geht, mit Spulennummer und gleichen Ersatzspulen; die Wechselkarte im Dashboard wird dann rot.
-
-- Wechsel-Standby: Feld `pm_wechsel_bereit_id` (Nr. der bereitgelegten Spule). Die Wechselkarte zeigt sie als bereit, Spulenwarnung und Runout nennen sie statt der Lagerliste, nach dem Tausch wird die Markierung automatisch gelöscht.
-
-- Bereitgelegte Spule wird gegen die aktive Spule geprüft (`sensor.pm_bereitgelegte_spule_prufung`): Warnung in Karte und Meldungen, wenn Sorte, Farbe oder Material abweichen.
+- **Spulenwarnung:** Meldung auf Handy und per Alexa (im Zeitfenster), wenn die aktive Spule unter 10 % und unter 5 % fällt sowie bei „Spule leer“ (unter 15 g). Die Meldung nennt die Spulennummer und schlägt bis zu drei **identische** Spulen aus dem Lager mit Nummer vor (gleicher Hersteller, gleiches Material, gleiche Farbe; mind. 30 % Rest, einstellbar; die mit dem geringsten Rest zuerst). Alle Schwellen sind in den Einstellungen änderbar.
+- **Wechselkarte** oben im Reiter Drucker: aktive Spule mit Nummer, Platz und Rest, Bedarf des laufenden und des nächsten Drucks, passende Ersatzspulen mit Nummer (identische mit ⭐), Ampelfarben grün/gelb/rot.
+- **Wechsel-Standby:** Feld `pm_wechsel_bereit_id` für die bereitgelegte Spule. Sie wird in der Wechselkarte und in den Meldungen genannt, gegen die aktive Spule auf Identität geprüft (`sensor.pm_bereitgelegte_spule_prufung`) und nach dem Tausch automatisch gelöscht.
+- **Runout-Meldung:** Geht der Filamentsensor mitten im Druck auf „aus“ (Spule leer), kommt eine Meldung auf Handy und Alexa; die Wechselkarte wird rot.
+- **Gesamtschätzung** beim Start des laufenden Drucks (Filament in m und g, geschätzte Kosten, Druckzeit, Schichten, Temperaturen) aus den Slicer-Metadaten.
+- **Update-Knopf** (`script.pm_aktualisieren`) in den Einstellungen: lädt die Paketdatei von GitHub, prüft die Konfiguration, lädt neu und nimmt bei Fehlern automatisch zurück. Die letzten drei Versionen bleiben als `.old1` bis `.old3` erhalten. Der Sensor `sensor.pm_paket_update` zeigt an, ob eine neuere Version vorliegt (Kachel und Zeile im Verbindungstest).
+- **Wareneingang:** Vorschläge aus der Open Filament Database (openfilamentdatabase.org, MIT-Lizenz) per EAN oder Hersteller + Material + Farbe/Farbcode. Das Material (PLA, PETG, …) muss immer übereinstimmen. Übernommen wird erst nach deiner Auswahl; die Daten werden einmalig geladen und wöchentlich erneuert.
+- **Lichtsteuerung 3D-Druck:** schaltet das Licht (frei wählbarer Schalter) zur eingestellten Uhrzeit aus, sofort bei laufendem Druck, sonst nach einer einstellbaren Nachlaufzeit. Taster „Licht an“ im Reiter Drucker.
+- **Nachtplanung** im Reiter Drucker: schlägt den längsten offenen Druck vor, der mit 15 min Reserve ins Nachtfenster passt und dessen Spule stimmt (ein Druck pro Nacht).
 
 ### Geändert
-- Ist im Slicer keine Filamentfarbe gesetzt, nimmt die Planung die Farbe der laufenden Spule an. Vorschläge für Spulenwechsel zeigen dann nur Spulen in gleicher Farbe.
-- Spulenwarnung nennt die Spulennummer der aktiven Spule und bis zu 3 passende Ersatzspulen im Lager mit Nummer (auch in der Sprachansage).
+- Ist im Slicer keine Filamentfarbe gesetzt, nimmt die Planung die Farbe der laufenden Spule an. Vorschläge für den Spulenwechsel zeigen dann nur Spulen in gleicher Farbe.
+- Reiter Wareneingang: am PC dreispaltig (Erfassen & Vorschläge | Sorte & Menge/Preis | Vorschau & Einbuchen), auf kleineren Bildschirmen zwei bzw. eine Spalte.
+- Foto-Upload-Karte (v0.1.1-beta): Drückst du im Wareneingang „Neu“, verschwindet das angezeigte Typenschild-Foto und der Status wird zurückgesetzt.
 
 ### Behoben
-- Spulenprüfung: Druckernamen im Slicer-Profil (z. B. „Generic Sovol SV08 PETG“) werden beim Material ignoriert. Vorher erschien bei laufendem Druck fälschlich „Spulenwechsel nötig – keine passende Spule“, obwohl die aktive Spule gepasst hat.
-
-### Geändert
-- Reiter Wareneingang neu angeordnet: am PC dreispaltig (Erfassen & Vorschläge | Sorte & Menge/Preis | Vorschau & Einbuchen), auf kleineren Bildschirmen zwei bzw. eine Spalte. Foto-Karte und „Letztes Foto erneut auswerten“ kompakter, Vorschläge in einer Karte.
-- Foto-Upload-Karte: Drückst du im Wareneingang „Neu“ (oder wurde gebucht), verschwindet das angezeigte Typenschild-Foto und der Status wird zurückgesetzt.
-
-### Hinzugefügt
-- Wareneingang: Vorschläge aus der Open Filament Database (openfilamentdatabase.org, MIT-Lizenz) per EAN oder Hersteller + Material + Farbe/Farbcode. Das Material (PLA, PETG, …) muss immer übereinstimmen. Übernommen werden Hersteller, Material, Farbe, Farbcode, EAN und Rollengröße erst nach deiner Auswahl. Die Daten werden einmalig geladen und wöchentlich erneuert.
-- Spulenwarnung: Meldung auf Handy und per Alexa (im Zeitfenster), wenn die aktive Spule unter 10 % und unter 5 % fällt sowie bei „Spule leer“ (unter 15 g). Die Meldung schlägt gleich eine identische Spule aus dem Lager vor (gleicher Hersteller, gleiches Material, gleiche Farbe – nie ein anderes Material oder anderer Hersteller) (mind. 30 % Rest, einstellbar; die mit dem geringsten Rest zuerst). Alle Schwellen in den Einstellungen änderbar.
-- Lichtsteuerung 3D-Druck: schaltet das Licht (frei wählbarer Schalter) zur eingestellten Uhrzeit aus; läuft dann schon ein Druck (oder startet nachts einer), sofort; sonst bleibt es nach einem frischen Upload noch die eingestellte Nachlaufzeit an. Taster „Licht an“ im Reiter Drucker schaltet es für eine einstellbare Dauer wieder ein. Alles in den Einstellungen anpassbar.
-- Karte „Nachtplanung“ im Reiter Drucker: schlägt aus den offenen Dateien den längsten Druck vor, der mit 15 min Reserve ins Nachtfenster passt und dessen Spule stimmt (ein Druck pro Nacht); Start und Ende der Nacht in den Einstellungen.
+- Spulenprüfung: Druckernamen im Slicer-Profil (z. B. „Generic Sovol SV08 PETG“) werden beim Material ignoriert. Vorher erschien bei laufendem Druck fälschlich „Spulenwechsel nötig – keine passende Spule“.
+- Dashboard: Kachel „Letztes Foto erneut auswerten“ brauchte eine Entität; doppelte Felder in den Einstellungen entfernt.
 
 ## [0.1.1-beta] – 2026-10-31
 

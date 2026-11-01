@@ -2,7 +2,7 @@
 
 [🇬🇧 English version](README.en.md)
 
-![Version](https://img.shields.io/badge/version-0.1.1--beta-orange)
+![Version](https://img.shields.io/badge/version-0.1.2--beta-orange)
 ![Status](https://img.shields.io/badge/status-beta-yellow)
 ![Lizenz](https://img.shields.io/badge/lizenz-GPL--3.0-blue)
 
@@ -74,7 +74,7 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
 3. **Druckeranbindung anpassen:** In `3d_print_manager.yaml`, Abschnitt **1. DRUCKERANBINDUNG**, das Präfix `sovol_sv08` durch das Präfix deiner Moonraker-Entitäten ersetzen (z. B. `sensor.mein_drucker_progress` → `mein_drucker`). Optional: Energiezähler und Strompreis-Sensor eintragen.
 4. **Home Assistant neu starten** (*Einstellungen → System → Neustart*).
 5. **Karte registrieren:** *Einstellungen → Dashboards → ⋮ → Ressourcen → Ressource hinzufügen*
-   URL `/local/print_manager/pm-foto-upload-card.js?v=0.1.0`, Typ *JavaScript-Modul*.
+   URL `/local/print_manager/pm-foto-upload-card.js?v=0.1.1`, Typ *JavaScript-Modul*.
 6. **Dashboard anlegen:** *Einstellungen → Dashboards → Dashboard hinzufügen → Neues Dashboard von Grund auf* → öffnen → ✏️ → ⋮ → *Raw-Konfigurationseditor* → Inhalt von `dashboards/3d_print_manager.yaml` einfügen → Speichern. Die beiden Kamera-Entitäten anpassen oder Karten löschen.
 7. **Einstellungen eintragen** (Reiter *Einstellungen* im Dashboard):
    - Moonraker-URL, z. B. `http://192.168.1.50:7125`
@@ -95,6 +95,12 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
 3. Dashboard-YAML bei Bedarf neu einfügen (eigene Anpassungen vorher sichern).
 4. Neustart. Einstellungen, Zähler, Aufträge (`/config/print_manager/`) bleiben erhalten.
 Siehe [CHANGELOG.md](CHANGELOG.md).
+
+### Update per Knopf (ab 0.1.2-beta)
+
+Im Reiter *Einstellungen* lädt der Knopf **„Paket von GitHub aktualisieren“** die aktuelle `3d_print_manager.yaml` aus diesem Repository, prüft die Konfiguration und lädt sie neu. Ist die Prüfung nicht bestanden, wird die vorherige Datei automatisch wiederhergestellt. Die letzten drei Versionen bleiben neben der Datei als `3d_print_manager.yaml.old1` bis `.old3` erhalten. Die Kachel *Paketversion* und der Verbindungstest zeigen, ob auf GitHub eine neuere Version liegt.
+
+> ⚠️ Der Knopf **ersetzt die ganze Paketdatei**. Hast du in Abschnitt 1 (Druckeranbindung) das Präfix deines Druckers angepasst, trägst du es danach wieder ein (oder nimmst die Sicherung `.old1` als Vorlage). Änderungen an den Sensoren mit `command_line` oder `rest` wirken erst nach einem Neustart. GitHub liefert neue Dateien bis zu 5 Minuten verzögert aus. Das Dashboard und die Karten-JS werden nicht automatisch aktualisiert.
 
 ## Dateien & Daten
 

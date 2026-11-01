@@ -1,6 +1,6 @@
 /*
  * 3D Print Manager – Typenschild-Foto-Upload-Karte
- * Version 0.1.0-beta · Lizenz GPL-3.0
+ * Version 0.1.1-beta · Lizenz GPL-3.0
  *
  * Drag & Drop (PC) bzw. Kamera (Handy). Das Foto wird verkleinert, nach
  * Medien → filament_fotos hochgeladen und danach automatisch per KI ausgewertet.
