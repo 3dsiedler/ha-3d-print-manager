@@ -277,6 +277,38 @@ input_number:
     step: 0.5
     unit_of_measurement: "Uhr"
     mode: box
+  pm_spule_warn1:
+    name: "PM Spulenwarnung 1: Rest unter (%)"
+    icon: mdi:spool
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+  pm_spule_warn2:
+    name: "PM Spulenwarnung 2: Rest unter (%)"
+    icon: mdi:spool
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+  pm_spule_ersatz_prozent:
+    name: "PM Ersatzspule im Lager: mindestens (%)"
+    icon: mdi:spool
+    min: 1
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+  pm_spule_leer_g:
+    name: "PM Spule leer: Rest unter (g)"
+    icon: mdi:spool
+    min: 1
+    max: 200
+    step: 1
+    unit_of_measurement: "g"
+    mode: box
   pm_meldung_alexa_ab:
     name: "PM Alexa-Durchsage ab (Uhr)"
     icon: mdi:clock-start
@@ -1015,6 +1047,38 @@ shell_command:
     else:
         post("move", {"source": "gcodes/verworfen/" + datei, "dest": "gcodes/" + datei})
     ' "{{ states('input_text.pm_moonraker_url') }}" {{ aktion }} "{{ datei }}"
+
+  # Ersatzspule im Lager suchen: nur identisch (gleiches Spoolman-Filament, sonst Hersteller+Material+Farbe+Name+Durchmesser)
+  pm_spule_ersatz: |-
+    python3 -c '
+    import sys, json, urllib.request as u
+    API, aktiv, minp = sys.argv[1].rstrip("/"), sys.argv[2], float(sys.argv[3])
+    lager = [x.strip().lower() for x in sys.argv[4].split(",") if x.strip()]
+    try:
+        alle = json.load(u.urlopen(API + "/spool?limit=1000", timeout=15))
+    except Exception:
+        print(""); raise SystemExit
+    def proz(s):
+        f = s.get("filament") or {}
+        g = s.get("initial_weight") or f.get("weight") or 0
+        return (s.get("remaining_weight") or 0) / g * 100 if g else 0
+    def key(s):
+        f = s.get("filament") or {}
+        return ((f.get("vendor") or {}).get("name", "").lower(), (f.get("material") or "").lower(), (f.get("color_hex") or "").lower().lstrip("#"), (f.get("name") or "").strip().lower(), f.get("diameter"))
+    cur = next((s for s in alle if str(s.get("id")) == aktiv), None)
+    if not cur:
+        print(""); raise SystemExit
+    kand = [s for s in alle if str(s.get("id")) != aktiv and not s.get("archived")
+            and (not lager or (s.get("location") or "").strip().lower() in lager)
+            and proz(s) >= minp
+            and (s["filament"]["id"] == cur["filament"]["id"] or key(s) == key(cur))]
+    kand.sort(key=lambda s: s.get("remaining_weight") or 0)
+    if kand:
+        s = kand[0]
+        print("Ersatz im Lager: #%s (%s), %d g = %d %%, Ort %s" % (s["id"], (s["filament"].get("name") or ""), round(s.get("remaining_weight") or 0), round(proz(s)), s.get("location") or "?"))
+    else:
+        print("Keine gleiche Ersatzspule im Lager mit mind. %d %%" % round(minp))
+    ' "{{ api }}" "{{ aktiv }}" "{{ minp }}" "{{ lager }}"
 
   # Aufträge speichern / Status setzen / löschen
   pm_auftrag: |-
@@ -2266,6 +2330,106 @@ automation:
             data:
               message: "{{ sprache }}"
 
+  - id: pm_spulenwarnung
+    alias: "PM Spulenwarnung – Rest 10 % / 5 % / leer (Handy & Alexa)"
+    description: >-
+      Meldet, wenn die aktive Spule unter die eingestellten Prozent-Schwellen
+      fällt (Standard 10 % und 5 %) und wenn sie praktisch leer ist
+      (Standard unter 15 g) und sucht dabei im Lager eine gleiche Ersatzspule
+      mit mindestens 30 % Rest (einstellbar). Ziele und Alexa-Zeitfenster wie beim Druckende.
+    mode: queued
+    triggers:
+      - trigger: numeric_state
+        entity_id: sensor.pm_aktive_spule_rest_prozent
+        below: input_number.pm_spule_warn1
+        id: w1
+      - trigger: numeric_state
+        entity_id: sensor.pm_aktive_spule_rest_prozent
+        below: input_number.pm_spule_warn2
+        id: w2
+      - trigger: numeric_state
+        entity_id: sensor.pm_aktive_spule_restgewicht
+        below: input_number.pm_spule_leer_g
+        id: leer
+    conditions:
+      # Warnung 1 entfällt, wenn der Rest gleich unter Warnung 2 gesprungen ist
+      - condition: or
+        conditions:
+          - condition: not
+            conditions:
+              - condition: trigger
+                id: w1
+          - condition: numeric_state
+            entity_id: sensor.pm_aktive_spule_rest_prozent
+            above: input_number.pm_spule_warn2
+    actions:
+      - variables:
+          name: "{{ states('sensor.pm_aktive_spule_name') }}"
+          prozent: "{{ states('sensor.pm_aktive_spule_rest_prozent') | float(0) | round(0) | int }}"
+          gramm: "{{ states('sensor.pm_aktive_spule_restgewicht') | float(0) | round(0) | int }}"
+      - action: shell_command.pm_spule_ersatz
+        data:
+          api: "{{ states('input_text.pm_spoolman_api') }}"
+          aktiv: "{{ states('sensor.pm_aktive_spule_id') }}"
+          minp: "{{ states('input_number.pm_spule_ersatz_prozent') | float(30) }}"
+          lager: "{{ states('input_text.pm_lagerorte') }}"
+        response_variable: ersatz_roh
+        continue_on_error: true
+      - variables:
+          ersatz: "{{ (ersatz_roh.stdout | default('') | trim) if ersatz_roh is defined and ersatz_roh is mapping else '' }}"
+      - variables:
+          titel: >-
+            {{ {'w1': '🧵 Spule wird knapp', 'w2': '⚠️ Spule fast leer',
+                'leer': '🛑 Spule leer'}[trigger.id] }}
+          text: "{{ name }} · noch {{ prozent }} % ({{ gramm }} g){{ '\n' ~ ersatz if ersatz else '' }}"
+          sprache: >-
+            {{ {'w1': 'Achtung, die Filament Spule ' ~ name ~ ' hat nur noch ' ~ prozent ~ ' Prozent.',
+                'w2': 'Achtung, die Filament Spule ' ~ name ~ ' ist fast leer, nur noch ' ~ prozent ~ ' Prozent.',
+                'leer': 'Achtung, die Filament Spule ' ~ name ~ ' ist leer. Bitte Spule wechseln.'}[trigger.id]
+               ~ (' Eine gleiche Spule ist im Lager.' if ersatz.startswith('Ersatz')
+                  else ' Im Lager ist keine gleiche Spule mit genug Rest.' if ersatz else '') }}
+      - alias: "Handys"
+        if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: input_text.pm_meldung_handys
+                state: ["", "unknown", "unavailable"]
+        then:
+          - repeat:
+              for_each: >-
+                {{ (states('input_text.pm_meldung_handys') | replace(' ', '')
+                   | replace('notify.', '') | replace('mobile_app_', '')).split(',')
+                   | reject('eq', '') | list }}
+              sequence:
+                - action: "notify.mobile_app_{{ repeat.item }}"
+                  continue_on_error: true
+                  data:
+                    title: "{{ titel }}"
+                    message: "{{ text }}"
+                    data:
+                      tag: pm_spulenwarnung
+                      url: /3d-print-manager/drucker
+                      clickAction: /3d-print-manager/drucker
+      - alias: "Alexa im Zeitfenster"
+        if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: input_text.pm_meldung_alexa
+                state: ["", "unknown", "unavailable"]
+          - condition: template
+            value_template: >-
+              {% set ab = states('input_number.pm_meldung_alexa_ab') | int(8) %}
+              {% set bis = states('input_number.pm_meldung_alexa_bis') | int(22) %}
+              {{ (ab <= now().hour < bis) if ab < bis else (now().hour >= ab or now().hour < bis) }}
+        then:
+          - action: notify.send_message
+            target:
+              entity_id: "{{ states('input_text.pm_meldung_alexa') | replace(' ', '') }}"
+            data:
+              message: "{{ sprache }}"
+
   # ---------------- Erstinstallation: sinnvolle Startwerte ----------------
   - id: pm_startwerte
     alias: "PM Startwerte setzen (nur bei leeren Feldern)"
@@ -2364,6 +2528,46 @@ automation:
               entity_id: input_number.pm_meldung_alexa_bis
             data:
               value: 22
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_spule_warn1
+            below: 1.5
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_spule_warn1
+            data:
+              value: 10
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_spule_warn2
+            below: 1.5
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_spule_warn2
+            data:
+              value: 5
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_spule_leer_g
+            below: 1.5
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_spule_leer_g
+            data:
+              value: 15
+      - if:
+          - condition: numeric_state
+            entity_id: input_number.pm_spule_ersatz_prozent
+            below: 1.5
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.pm_spule_ersatz_prozent
+            data:
+              value: 30
       # Textfelder ohne gespeicherten Wert stehen sonst als "unknown" im Dashboard
       - repeat:
           for_each: >-

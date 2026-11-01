@@ -875,7 +875,7 @@ views:
               - entity: input_number.pm_filamentdichte
                 name: Dichte, wenn Spule ohne Dichte
           - type: heading
-            heading: Meldung bei Druckende
+            heading: Meldungen (Druckende & Spule)
             icon: mdi:bell-ring-outline
             heading_style: subtitle
           - type: entities
@@ -889,6 +889,14 @@ views:
                 name: "Alexa spricht ab"
               - entity: input_number.pm_meldung_alexa_bis
                 name: "Alexa schweigt ab"
+              - entity: input_number.pm_spule_warn1
+                name: "Spulenwarnung 1 bei Rest unter"
+              - entity: input_number.pm_spule_warn2
+                name: "Spulenwarnung 2 bei Rest unter"
+              - entity: input_number.pm_spule_leer_g
+                name: "Spule leer bei Rest unter"
+              - entity: input_number.pm_spule_ersatz_prozent
+                name: "Ersatzspule im Lager mindestens"
           - type: markdown
             content: |-
               <small>Leer lassen = keine Meldung. Handys: Companion-App-Entitäten; Antippen der Meldung öffnet dieses Dashboard. Die Entitäten findest du unter *Einstellungen → Geräte & Dienste → Entitäten* (nach „notify“ filtern).</small>

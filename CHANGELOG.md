@@ -5,6 +5,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Hinzugefügt
+- Spulenwarnung: Meldung auf Handy und per Alexa (im Zeitfenster), wenn die aktive Spule unter 10 % und unter 5 % fällt sowie bei „Spule leer“ (unter 15 g). Die Meldung schlägt gleich eine identische Spule aus dem Lager vor (gleicher Hersteller, gleiches Material, gleiche Farbe – nie ein anderes Material oder anderer Hersteller) (mind. 30 % Rest, einstellbar; die mit dem geringsten Rest zuerst). Alle Schwellen in den Einstellungen änderbar.
 - Lichtsteuerung 3D-Druck: schaltet das Licht (frei wählbarer Schalter) zur eingestellten Uhrzeit aus; läuft dann schon ein Druck (oder startet nachts einer), sofort; sonst bleibt es nach einem frischen Upload noch die eingestellte Nachlaufzeit an. Taster „Licht an“ im Reiter Drucker schaltet es für eine einstellbare Dauer wieder ein. Alles in den Einstellungen anpassbar.
 - Karte „Nachtplanung“ im Reiter Drucker: schlägt aus den offenen Dateien den längsten Druck vor, der mit 15 min Reserve ins Nachtfenster passt und dessen Spule stimmt (ein Druck pro Nacht); Start und Ende der Nacht in den Einstellungen.
 
