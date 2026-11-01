@@ -4,6 +4,9 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Hinzugefügt
+- Update-Knopf: `script.pm_aktualisieren` lädt die Paketdatei von GitHub, prüft die Konfiguration, lädt neu und nimmt bei Fehlern automatisch zurück (die letzten 3 Versionen bleiben als `.old1` bis `.old3` erhalten).
+
 ### Geändert
 - Spulenwarnung nennt die Spulennummer der aktiven Spule und bis zu 3 passende Ersatzspulen im Lager mit Nummer (auch in der Sprachansage).
 

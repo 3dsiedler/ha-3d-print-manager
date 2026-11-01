@@ -832,6 +832,18 @@ views:
               {% if spule in ['unknown','unavailable'] %}⏳ Aktive Spule: noch unbekannt{% else %}✅ Aktive Spule laut Moonraker: #{{ spule }}{% endif %}
               {% if states(ki) in ['unknown','unavailable'] or not ki.startswith('ai_task.') %}⚠️ KI-Entität „{{ ki }}“ nicht gefunden – Fotoerkennung nicht verfügbar{% else %}✅ KI für Fotoerkennung: {{ state_attr(ki, 'friendly_name') or ki }}{% endif %}
               {% if states('sensor.pm_druckstatus') in ['unknown','unavailable'] %}❌ Druckeranbindung: sensor.pm_druckstatus liefert keine Daten – Abschnitt 1 im Package prüfen{% else %}✅ Druckeranbindung: Status „{{ states('sensor.pm_druckstatus') }}“{% endif %}
+          - type: button
+            name: "Paket von GitHub aktualisieren"
+            icon: mdi:cloud-download-outline
+            show_state: false
+            tap_action:
+              action: perform-action
+              perform_action: script.pm_aktualisieren
+              confirmation:
+                text: "Aktuelle Paketdatei von GitHub laden, prüfen und neu laden?"
+            grid_options:
+              columns: 12
+              rows: 1
       - type: grid
         cards:
           - type: heading

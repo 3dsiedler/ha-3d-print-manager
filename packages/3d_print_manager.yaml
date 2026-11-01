@@ -1383,6 +1383,62 @@ shell_command:
         print(json.dumps({"ok": False, "text": "Fehler beim Einbuchen: " + str(e)}))
     ' "{{ states('input_text.pm_spoolman_api') }}" "{{ daten }}"
 
+  # Paket von GitHub holen (öffentliches Repo). Sichert die letzten 3 Versionen als .old1 bis .old3, prüft grob und ersetzt sie.
+  pm_update_holen: |-
+    python3 -I -c '
+    import os, shutil, urllib.request as u
+    Z = "/config/packages/3d_print_manager.yaml"
+    URL = "https://raw.githubusercontent.com/3dsiedler/ha-3d-print-manager/main/packages/3d_print_manager.yaml"
+    try:
+        neu = u.urlopen(URL, timeout=30).read()
+    except Exception as e:
+        print("FEHLER Download: %s" % e); raise SystemExit
+    if len(neu) < 20000 or b"3d_print_manager" not in neu[:2000] and b"pm_" not in neu:
+        print("FEHLER Datei unplausibel (%d Bytes)" % len(neu)); raise SystemExit
+    alt = open(Z, "rb").read() if os.path.exists(Z) else b""
+    if alt == neu:
+        print("AKTUELL"); raise SystemExit
+    if alt:
+        for i in (3, 2):
+            if os.path.exists("%s.old%d" % (Z, i - 1)):
+                os.replace("%s.old%d" % (Z, i - 1), "%s.old%d" % (Z, i))
+        shutil.copy2(Z, Z + ".old1")
+    open(Z + ".neu", "wb").write(neu); os.replace(Z + ".neu", Z)
+    print("NEU %d Bytes" % len(neu))
+    '
+
+  # Konfiguration prüfen (HA-eigener Check, ca. 20-50 s)
+  pm_update_pruefen: |-
+    python3 -I -c '
+    import subprocess, sys
+    try:
+        r = subprocess.run([sys.executable, "-m", "homeassistant", "--script", "check_config", "-c", "/config"], capture_output=True, text=True, timeout=55)
+    except Exception as e:
+        print("UNGEPRUEFT %s" % e); raise SystemExit
+    o = (r.stdout + r.stderr)
+    if r.returncode != 0 or "Failed config" in o:
+        print("FEHLER " + " ".join(o.split())[-400:])
+    else:
+        print("OK")
+    '
+
+  # Rückgängig: .old1 zurückkopieren und die Sicherungen nachrücken lassen
+  pm_update_zurueck: |-
+    python3 -I -c '
+    import os, shutil
+    Z = "/config/packages/3d_print_manager.yaml"
+    if os.path.exists(Z + ".old1"):
+        shutil.copy2(Z + ".old1", Z)
+        for i in (1, 2):
+            if os.path.exists("%s.old%d" % (Z, i + 1)):
+                os.replace("%s.old%d" % (Z, i + 1), "%s.old%d" % (Z, i))
+            elif os.path.exists("%s.old%d" % (Z, i)):
+                os.remove("%s.old%d" % (Z, i))
+        print("ZURUECK")
+    else:
+        print("KEIN_BACKUP")
+    '
+
   # neuestes Typenschild-Foto in /media/filament_fotos finden (legt Ordner an)
   pm_neuestes_foto: |-
     python3 -c '
@@ -1579,6 +1635,57 @@ script:
           entity_id: input_number.pm_kalk_anzahl
         data:
           value: 1
+
+  pm_aktualisieren:
+    alias: "PM 3D Print Manager aktualisieren"
+    icon: mdi:cloud-download-outline
+    description: >-
+      Lädt die aktuelle Paketdatei von GitHub, prüft die Konfiguration und lädt sie neu.
+      Ist die Konfiguration fehlerhaft, wird die vorherige Datei automatisch wiederhergestellt.
+    mode: single
+    sequence:
+      - action: shell_command.pm_update_holen
+        response_variable: upd
+      - variables:
+          erg: "{{ (upd.stdout | default('') | trim) if upd is defined and upd is mapping else 'FEHLER keine Antwort' }}"
+      - choose:
+          - conditions: "{{ erg.startswith('NEU') }}"
+            sequence:
+              - action: shell_command.pm_update_pruefen
+                response_variable: chk
+              - variables:
+                  pruef: "{{ (chk.stdout | default('') | trim) if chk is defined and chk is mapping else 'UNGEPRUEFT' }}"
+              - if: "{{ pruef.startswith('FEHLER') }}"
+                then:
+                  - action: shell_command.pm_update_zurueck
+                  - action: persistent_notification.create
+                    data:
+                      notification_id: pm_aktualisieren
+                      title: "3D Print Manager – Update zurückgenommen"
+                      message: "Die neue Paketdatei hat die Konfigurationsprüfung nicht bestanden, die alte Datei ist wieder aktiv. {{ pruef }}"
+                else:
+                  - action: persistent_notification.create
+                    data:
+                      notification_id: pm_aktualisieren
+                      title: "3D Print Manager aktualisiert"
+                      message: >-
+                        Neue Paketdatei geladen ({{ erg }}), Konfiguration wird neu geladen.
+                        Änderungen an Sensoren mit command_line oder rest werden erst nach einem Neustart von Home Assistant wirksam.
+                  - action: homeassistant.reload_all
+                    continue_on_error: true
+          - conditions: "{{ erg == 'AKTUELL' }}"
+            sequence:
+              - action: persistent_notification.create
+                data:
+                  notification_id: pm_aktualisieren
+                  title: "3D Print Manager"
+                  message: "Das Paket ist schon auf dem neuesten Stand."
+        default:
+          - action: persistent_notification.create
+            data:
+              notification_id: pm_aktualisieren
+              title: "3D Print Manager – Update fehlgeschlagen"
+              message: "{{ erg }}"
 
   pm_we_zuruecksetzen:
     alias: "PM Wareneingang zurücksetzen"
