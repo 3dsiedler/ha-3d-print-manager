@@ -10,6 +10,15 @@ Druckverwaltung, Filamentlager und Auftragskalkulation für **Klipper-Drucker mi
 
 > ⚠️ **Beta:** Entwickelt und getestet mit einem **Sovol SV08** (Klipper, Moonraker, **FilaMan** über die Spoolman-kompatible API, OrcaSlicer). Das originale Spoolman nutzt dieselbe API und sollte genauso funktionieren, ist aber nicht separat getestet. Andere Moonraker-Drucker sollten funktionieren, sind aber nicht getestet. Rückmeldungen bitte als [Issue](../../issues). OctoPrint/Marlin ist geplant.
 
+> [!CAUTION]
+> **Hinweis und Haftungsausschluss**
+>
+> Dieses Projekt ist mein Versuch, mein eigenes Chaos beim 3D-Druck – Filamentlager, Druckplanung und Kalkulation – mit Home Assistant zu verwalten. Es dient zugleich als Planung für eine spätere Umsetzung als eigene App. Zurzeit ist es sehr speziell auf meine Bedürfnisse und Anforderungen zugeschnitten.
+>
+> - **Update-Funktion im Code:** Das Package enthält eine Update-Funktion (Knopf „Paket von GitHub aktualisieren“ bzw. `script.pm_aktualisieren`). Sie lädt die neueste Version direkt aus diesem Repository und schreibt sie in deine Home-Assistant-Konfiguration. Was hier veröffentlicht wird, landet damit ohne weitere Prüfung in deinem System.
+> - **Mit KI-Unterstützung entwickelt:** Der Code ist mit Hilfe einer KI entstanden. Er kann deshalb falschen, defekten oder sogar schädlichen Code enthalten.
+> - **Benutzung auf eigene Gefahr.** Prüfe den Code vor dem Einsatz und lege vorher ein Backup an. Ich übernehme keine Haftung für Schäden an deinem System, deinen Daten oder deinen Geräten.
+
 ## Screenshots
 
 | Drucker | Einstellungen mit Verbindungstest |

@@ -12,6 +12,15 @@ Print management, filament inventory and job costing for **Klipper printers with
 >
 > The user interface (dashboard, notifications) is currently **German only**.
 
+> [!CAUTION]
+> **Notice and disclaimer**
+>
+> This project is my attempt to manage my own 3D printing chaos – filament storage, print planning and costing – with Home Assistant. It also serves as groundwork for a later implementation as a standalone app. At the moment it is tailored very specifically to my own needs and requirements.
+>
+> - **Update function in the code:** The package contains an update function (the "Paket von GitHub aktualisieren" button or `script.pm_aktualisieren`). It downloads the latest version directly from this repository and writes it into your Home Assistant configuration. Whatever is published here ends up in your system without any further review.
+> - **Developed with AI assistance:** The code was written with the help of an AI. It may therefore contain incorrect, broken or even harmful code.
+> - **Use at your own risk.** Review the code before using it and make a backup first. I accept no liability for damage to your system, your data or your devices.
+
 ## Screenshots
 
 | Printer | Settings with connection test |
