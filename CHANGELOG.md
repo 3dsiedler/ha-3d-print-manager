@@ -4,6 +4,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.1.3-beta] – 2026-11-22
+
+### Geändert
+- **Wareneingang an das Schema der Open Filament Database angepasst:** Im Feld „Material“ steht jetzt die **Sorte** (z. B. PLA+ 2.0). In FilaMan/Spoolman wird das Material als **Klasse** (PLA, PETG, …) und der Name als **Sorte + Farbe** angelegt. Deutsche Farbnamen (weiß, grau, …) werden zu den englischen der Open Filament Database.
+- **Einbuchen und Vorschläge als Skripte:** Der Code für „Spule einbuchen“ und die OFD-Vorschläge steht nicht mehr im Paket, sondern in `www/system/pm_einbuchen.py` und `www/system/pm_ofd.py`. **Beide Dateien müssen nach `/config/www/system/` kopiert werden**, sonst funktionieren Wareneingang und Vorschläge nicht.
+- **Listen für Sorten:** Die Auswahl zeigt „Sorte 25 · Sunlu PLA+ White (PLA)“ statt „#25 …“, damit die Sortennummer nicht mit der Spulennummer verwechselt wird.
+- Modus **FilaManDB** (Test): Fehlt eine Sorte, erklärt die Meldung, wie sie in FilaMan angelegt wird.
+
 ## [0.1.2-beta] – 2026-11-01
 
 ### Hinzugefügt
