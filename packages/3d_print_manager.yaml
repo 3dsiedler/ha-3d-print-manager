@@ -1,6 +1,6 @@
 ###############################################################################
 #  3D Print Manager für Home Assistant
-#  Version: 0.1.3-beta
+#  Version: 0.1.4-beta
 #  Repository: https://github.com/3dsiedler/ha-3d-print-manager
 #  Lizenz: GPL-3.0
 #
@@ -1259,18 +1259,33 @@ shell_command:
   pm_spule_einbuchen: |-
     python3 -I /config/www/system/pm_einbuchen.py "{{ states('input_text.pm_spoolman_api') }}" "{{ daten }}"
 
-  # Paket von GitHub holen (öffentliches Repo). Sichert die letzten 3 Versionen als .old1 bis .old3, prüft grob und ersetzt sie.
+  # Paket und Skripte (pm_einbuchen.py, pm_ofd.py) von GitHub holen (öffentliches Repo). Sichert die letzten 3 Paketversionen als .old1 bis .old3 (Skripte: .old1), prüft grob und ersetzt sie.
   pm_update_holen: |-
     python3 -I -c '
     import os, shutil, urllib.request as u
     Z = "/config/packages/3d_print_manager.yaml"
-    URL = "https://raw.githubusercontent.com/3dsiedler/ha-3d-print-manager/main/packages/3d_print_manager.yaml"
+    RAW = "https://raw.githubusercontent.com/3dsiedler/ha-3d-print-manager/main/"
+    SKRIPTE = ["pm_einbuchen.py", "pm_ofd.py"]
+    def holen(pfad):
+        return u.urlopen(RAW + pfad, timeout=30).read()
     try:
-        neu = u.urlopen(URL, timeout=30).read()
+        neu = holen("packages/3d_print_manager.yaml")
+        skripte = dict((n, holen("www/system/" + n)) for n in SKRIPTE)
     except Exception as e:
         print("FEHLER Download: %s" % e); raise SystemExit
     if len(neu) < 20000 or b"3d_print_manager" not in neu[:2000] and b"pm_" not in neu:
         print("FEHLER Datei unplausibel (%d Bytes)" % len(neu)); raise SystemExit
+    for n, inhalt in skripte.items():
+        if len(inhalt) < 500 or b"import" not in inhalt:
+            print("FEHLER Skript %s unplausibel (%d Bytes)" % (n, len(inhalt))); raise SystemExit
+    geaendert = []
+    for n, inhalt in skripte.items():
+        P = "/config/www/system/" + n
+        if not os.path.exists(P) or open(P, "rb").read() != inhalt:
+            if os.path.exists(P):
+                shutil.copy2(P, P + ".old1")
+            open(P + ".neu", "wb").write(inhalt); os.replace(P + ".neu", P)
+            geaendert.append(n)
     alt = open(Z, "rb").read() if os.path.exists(Z) else b""
     if alt == neu:
         print("AKTUELL"); raise SystemExit
@@ -1280,7 +1295,7 @@ shell_command:
                 os.replace("%s.old%d" % (Z, i - 1), "%s.old%d" % (Z, i))
         shutil.copy2(Z, Z + ".old1")
     open(Z + ".neu", "wb").write(neu); os.replace(Z + ".neu", Z)
-    print("NEU %d Bytes" % len(neu))
+    print("NEU %d Bytes%s" % (len(neu), (" + Skripte " + ",".join(geaendert)) if geaendert else ""))
     '
 
   # Konfiguration prüfen (HA-eigener Check, ca. 20-50 s)

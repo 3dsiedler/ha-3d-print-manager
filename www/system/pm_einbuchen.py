@@ -5,7 +5,10 @@ API = sys.argv[1].rstrip("/") + "/"
 def r(m, p, body=None):
     data = json.dumps(body).encode() if body is not None else None
     q = u.Request(API + p, data=data, method=m, headers={"Content-Type": "application/json"})
-    return json.load(u.urlopen(q, timeout=15))
+    try:
+        return json.load(u.urlopen(q, timeout=15))
+    except u.HTTPError as e:
+        raise RuntimeError(m + " " + p + " -> HTTP " + str(e.code) + ": " + e.read().decode("utf-8", "replace")[:300] + (" | gesendet: " + json.dumps(body, ensure_ascii=False)[:300] if body is not None else ""))
 def norm(s):
     s = (s or "").lower().replace("+", " plus ").replace("plus", " plus ")
     return " ".join(re.sub(r"[^a-z0-9.]+", " ", s).split())
@@ -65,13 +68,14 @@ try:
             raise SystemExit
         ven = vorh or r("POST", "vendor", {"name": herst})
         body = {"name": name_neu, "vendor_id": ven["id"], "material": kl, "weight": gew, "diameter": 1.75, "density": DICHTE.get(kl.lower(), 1.24)}
-        if hexw:
-            body["color_hex"] = hexw
         if ean:
             body["article_number"] = ean
         if preis:
             body["price"] = preis
         f = r("POST", "filament", body)
+        # FilaMan 1.4.2: Anlegen mit color_hex liefert HTTP 500, nachtraegliches Setzen per PATCH geht
+        if hexw:
+            f = r("PATCH", "filament/" + str(f["id"]), {"color_hex": hexw})
         neu = True
     elif ean and not f.get("article_number"):
         r("PATCH", "filament/" + str(f["id"]), {"article_number": ean})

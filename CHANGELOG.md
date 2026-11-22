@@ -4,6 +4,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.1.4-beta] – 2026-11-22
+
+### Geändert
+- **Update-Knopf lädt jetzt auch die Skripte:** Neben dem Paket holt er `www/system/pm_einbuchen.py` und `www/system/pm_ofd.py` von GitHub und legt sie in `/config/www/system/` ab (Sicherung der alten Skriptversion als `.old1`). Wer von 0.1.2 oder älter kommt, muss die beiden Dateien **einmalig von Hand** nach `/config/www/system/` kopieren und danach erst den Knopf benutzen.
+
+### Behoben
+- **Wareneingang bei neuen Sorten:** FilaMan 1.4.2 antwortet beim Anlegen einer Sorte mit einem Farbcode im Spoolman-Format mit HTTP 500. Die Sorte wird jetzt ohne Farbcode angelegt und der Farbcode danach gesetzt. Außerdem zeigt die Fehlermeldung beim Einbuchen jetzt die Antwort von FilaMan und die gesendeten Daten.
+
 ## [0.1.3-beta] – 2026-11-22
 
 ### Geändert
