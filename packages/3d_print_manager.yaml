@@ -1,6 +1,6 @@
 ###############################################################################
 #  3D Print Manager für Home Assistant
-#  Version: 0.1.4-beta
+#  Version: 0.1.5-beta
 #  Repository: https://github.com/3dsiedler/ha-3d-print-manager
 #  Lizenz: GPL-3.0
 #
@@ -1168,6 +1168,33 @@ command_line:
 ###############################################################################
 # 4. BEFEHLE (schreibende Aktionen)
 ###############################################################################
+  - sensor:
+      name: "PM Paket Version"
+      unique_id: pm_paket_version
+      icon: mdi:tag-outline
+      scan_interval: 3600
+      command_timeout: 30
+      value_template: "{{ value_json.installiert }}"
+      json_attributes:
+        - neu
+      command: |-
+        python3 -I -c '
+        import json, re, urllib.request as u
+        Z = "/config/packages/3d_print_manager.yaml"
+        URL = "https://raw.githubusercontent.com/3dsiedler/ha-3d-print-manager/main/packages/3d_print_manager.yaml"
+        def ver(b):
+            m = re.search(rb"Version:\s*([0-9][0-9A-Za-z.+-]*)", b)
+            return m.group(1).decode() if m else "?"
+        try:
+            alt = open(Z, "rb").read()
+        except Exception:
+            alt = b""
+        try:
+            neu = u.urlopen(URL, timeout=20).read()
+        except Exception:
+            neu = b""
+        print(json.dumps({"installiert": ver(alt), "neu": ver(neu) if neu else "unbekannt"}))
+        '
 shell_command:
   # G-Code in Ordner "verworfen" verschieben / zurückholen
   pm_datei_verwerfen: |-

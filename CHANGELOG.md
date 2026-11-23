@@ -4,6 +4,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.1.5-beta] – 2026-11-23
+
+### Neu
+- **Versionsanzeige beim Update:** Neuer Sensor „PM Paket Version“ (`sensor.pm_paket_version`). Die Infokarte in den Einstellungen zeigt jetzt die installierte Version und, falls vorhanden, die neue Version auf GitHub.
+
 ## [0.1.4-beta] – 2026-11-22
 
 ### Geändert
